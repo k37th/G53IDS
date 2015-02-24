@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="grouping_array">
+        <item>Eatery</item>
+        <item>Public Service</item>
+        <item>Utilities</item>
+        <item>Necessities</item>
+    </string-array>
+</resources>
