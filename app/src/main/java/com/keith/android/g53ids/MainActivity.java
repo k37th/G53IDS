@@ -1,5 +1,6 @@
 package com.keith.android.g53ids;
 
+import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -15,11 +16,19 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.support.v7.widget.PopupMenu;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.Toast;
 
 import com.keith.android.g53ids.database.DBHelper;
 import com.keith.android.g53ids.gps.GPSTracker;
+import com.loopj.android.http.AsyncHttpClient;
+import com.loopj.android.http.AsyncHttpResponseHandler;
+import com.loopj.android.http.RequestParams;
 
+import org.apache.http.Header;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.mapsforge.core.graphics.Bitmap;
 import org.mapsforge.core.graphics.Color;
 import org.mapsforge.core.graphics.Style;
@@ -46,6 +55,7 @@ public class MainActivity extends ActionBarActivity{
     private static final String MAPFILE = "malaysia_singapore_brunei.map";
     private static final String TAG = "MainActivity";
     static final int SEARCH_REQUEST = 1;
+    private ProgressDialog progressDialog;
     private MapView mapView;
     private TileCache tileCache;
     private TileRendererLayer tileRendererLayer;
@@ -60,8 +70,8 @@ public class MainActivity extends ActionBarActivity{
         this.registerReceiver(broadcastReceiver,filter);
         initGPS();
         initMapView();
-//        initActionButton();
         initCenterButton();
+        initProgressDialog();
         showCurrentLocation(getInitialPosition());
     }
 
@@ -92,6 +102,13 @@ public class MainActivity extends ActionBarActivity{
         int id = item.getItemId();
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
+            return true;
+        }
+        else if(id == R.id.action_sync){
+            syncRemoteDatabase();
+            return true;
+        }
+        else if(id == R.id.action_about){
             return true;
         }
         else if(id == R.id.search_action){
@@ -137,7 +154,7 @@ public class MainActivity extends ActionBarActivity{
     }
 
     public void initCenterButton(){
-        Button center = (Button)(findViewById(R.id.center));
+        ImageButton center = (ImageButton)(findViewById(R.id.center));
         center.setOnClickListener(new OnClickListener(){
             public void onClick(View v){
                 mapView.getModel().mapViewPosition.animateTo(getCurrentPosition());
@@ -259,6 +276,78 @@ public class MainActivity extends ActionBarActivity{
             Layer extra = mapView.getLayerManager().getLayers().get(2);
             mapView.getLayerManager().getLayers().remove(extra);
             extra.onDestroy();
+        }
+    }
+
+    public void initProgressDialog(){
+        progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage("Syncing with online database");
+        progressDialog.setCancelable(false);
+    }
+
+    public void syncRemoteDatabase(){
+        AsyncHttpClient client = new AsyncHttpClient();
+        RequestParams params = new RequestParams();
+        String date = DBHelper.getInstance(this).getLastSyncDate();
+        params.put("date",date);
+        progressDialog.show();
+        client.post("http://g53ids-env.elasticbeanstalk.com/test.php", params, new AsyncHttpResponseHandler(){
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+//                Toast.makeText(getApplicationContext(), new String(responseBody), Toast.LENGTH_LONG).show();
+                saveNewData(new String(responseBody));
+                progressDialog.dismiss();
+            }
+
+            @Override
+            public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                progressDialog.dismiss();
+                if (statusCode == 404) {
+                    Toast.makeText(getApplicationContext(), "Requested resource not found", Toast.LENGTH_LONG).show();
+                } else if (statusCode == 500) {
+                    Toast.makeText(getApplicationContext(), "Something went wrong at server end", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(getApplicationContext(), "Unexpected Error occcured! [Most common Error: Device might not be connected to Internet]",
+                            Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+    }
+
+    public void saveNewData(String responseBody){
+        try{
+            JSONArray arr = new JSONArray(responseBody);
+            if(arr.length() != 0){
+                for(int i=0; i<arr.length();i++){
+                    JSONObject object = (JSONObject)arr.get(i);
+                    POI p = new POI(
+                            object.get("Id").toString(),
+                            object.get("Name").toString(),
+                            object.get("Type").toString(),
+                            Double.parseDouble(object.get("Rating").toString()),
+                            object.get("Contact").toString(),
+                            object.get("OpenTime").toString(),
+                            object.get("CloseTime").toString(),
+                            Integer.parseInt(object.get("Monday").toString()),
+                            Integer.parseInt(object.get("Tuesday").toString()),
+                            Integer.parseInt(object.get("Wednesday").toString()),
+                            Integer.parseInt(object.get("Thursday").toString()),
+                            Integer.parseInt(object.get("Friday").toString()),
+                            Integer.parseInt(object.get("Saturday").toString()),
+                            Integer.parseInt(object.get("Sunday").toString()),
+                            Integer.parseInt(object.get("Status").toString()),
+                            new LatLong(
+                                    Double.parseDouble(object.get("Latitude").toString()),
+                                    Double.parseDouble(object.get("Longitude").toString())
+                                    )
+                            );
+                    DBHelper.getInstance(this).insertPOI(p);
+                    Toast.makeText(this,"This point was reached", Toast.LENGTH_LONG).show();
+                }
+            }
+
+        }catch(JSONException e){
+            e.printStackTrace();
         }
     }
 

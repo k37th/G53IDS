@@ -14,7 +14,7 @@ import android.widget.Toast;
 public class GPSTracker extends Service implements LocationListener{
 
     private final Context mContext;
-
+    private static final String TAG = "GPSTracker";
     boolean isGPSEnabled = false;
     boolean isNetworkEnabled = false;
     boolean canGetLocation = false;
@@ -24,7 +24,7 @@ public class GPSTracker extends Service implements LocationListener{
     double longitude;
 
     private static final long MIN_DISTANCE = 1;
-    private static final long MIN_TIME = 3 * 10000;
+    private static final long MIN_TIME = 3 * 1000;
 
     protected LocationManager locationManager;
 
@@ -46,7 +46,6 @@ public class GPSTracker extends Service implements LocationListener{
                 if(isNetworkEnabled){
                     locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, MIN_TIME, MIN_DISTANCE, this);
                     Log.d("GPSTracker", "Network being used");
-//                    Toast.makeText(this,"Using network",Toast.LENGTH_SHORT).show();
                     if (locationManager != null) {
                         location = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
                         if (location != null) {
@@ -55,20 +54,20 @@ public class GPSTracker extends Service implements LocationListener{
                         }
                     }
                 }
-                else if(isGPSEnabled){
+//                else
+//                if(isGPSEnabled){
 //                    if(location == null){
-                        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, MIN_TIME, MIN_DISTANCE, this);
-                        Log.d("GPSTracker","GPS being used");
-//                        Toast.makeText(this,"Using GPS",Toast.LENGTH_SHORT).show();
-                        if(locationManager != null){
-                            location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-                            if(location != null){
-                                latitude = location.getLatitude();
-                                longitude = location.getLongitude();
-                            }
-                        }
-//                    }
-                }
+//                        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, MIN_TIME, MIN_DISTANCE, this);
+//                        Log.d("GPSTracker","GPS being used");
+//                        if(locationManager != null){
+//                            location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+//                            if(location != null){
+//                                latitude = location.getLatitude();
+//                                longitude = location.getLongitude();
+//                            }
+//                        }
+////                    }
+//                }
                 else{
                     Log.d("GPSTracker", "GPS not enabled");
                 }
@@ -91,10 +90,16 @@ public class GPSTracker extends Service implements LocationListener{
 
     @Override
     public void onProviderDisabled(String provider) {
+        if(LocationManager.GPS_PROVIDER.equals(provider)){
+            Log.d(TAG,"GPS was turned off");
+        }
     }
 
     @Override
     public void onProviderEnabled(String provider) {
+        if(LocationManager.GPS_PROVIDER.equals(provider)){
+            Log.d(TAG,"GPS was turned on");
+        }
     }
 
     @Override

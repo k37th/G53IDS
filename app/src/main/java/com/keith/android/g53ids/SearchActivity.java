@@ -38,10 +38,15 @@ public class SearchActivity extends ActionBarActivity{
             public void onItemClick(AdapterView< ?> parent, View view, int position, long id) {
                 TextView nameTV = (TextView) view.findViewById(R.id.poi_name);
                 String poiID = (String)nameTV.getTag();
-                Intent intent = new Intent();
-                intent.putExtra("poiID", poiID);
-                setResult(Activity.RESULT_OK, intent);
-                finish();
+                if(poiID.equals("0")){
+
+                }
+                else{
+                    Intent intent = new Intent();
+                    intent.putExtra("poiID", poiID);
+                    setResult(Activity.RESULT_OK, intent);
+                    finish();
+                }
             }
         });
 

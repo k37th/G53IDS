@@ -8,14 +8,23 @@
         android:id="@+id/mapView"
         android:layout_width="fill_parent"
         android:layout_height="fill_parent" />
-    <Button
+    <!--<Button-->
+        <!--android:id="@+id/center"-->
+        <!--android:layout_width="wrap_content"-->
+        <!--android:layout_height="wrap_content"-->
+        <!--android:text="Center"-->
+        <!--android:layout_centerVertical="true"-->
+        <!--android:layout_alignParentLeft="true"-->
+        <!--android:layout_alignParentStart="true" />-->
+    <ImageButton
         android:id="@+id/center"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Center"
         android:layout_centerVertical="true"
         android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true" />
+        android:layout_alignParentStart="true"
+        android:src="@drawable/ic_action_location_found"/>
     <!--<Button-->
         <!--android:id="@+id/action"-->
         <!--android:layout_width="wrap_content"-->
