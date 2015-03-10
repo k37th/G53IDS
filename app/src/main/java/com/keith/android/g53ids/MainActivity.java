@@ -5,7 +5,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Path;
 import android.graphics.drawable.Drawable;
+import android.os.AsyncTask;
 import android.os.Environment;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
@@ -19,8 +21,14 @@ import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.Toast;
 
+import com.graphhopper.GHRequest;
+import com.graphhopper.GHResponse;
+import com.graphhopper.GraphHopper;
+import com.graphhopper.util.PointList;
+import com.graphhopper.util.StopWatch;
 import com.keith.android.g53ids.database.DBHelper;
 import com.keith.android.g53ids.gps.GPSTracker;
+import com.keith.android.g53ids.gps.LocationReceiver;
 import com.loopj.android.http.AsyncHttpClient;
 import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.RequestParams;
@@ -31,6 +39,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.mapsforge.core.graphics.Bitmap;
 import org.mapsforge.core.graphics.Color;
+import org.mapsforge.core.graphics.Paint;
 import org.mapsforge.core.graphics.Style;
 import org.mapsforge.core.model.BoundingBox;
 import org.mapsforge.core.model.LatLong;
@@ -44,47 +53,69 @@ import org.mapsforge.map.layer.Layers;
 import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.overlay.Circle;
 import org.mapsforge.map.layer.overlay.Marker;
+import org.mapsforge.map.layer.overlay.Polyline;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.rendertheme.InternalRenderTheme;
 
 import java.io.File;
+import java.util.List;
 
 
 public class MainActivity extends ActionBarActivity{
-//    private PopupMenu popupMenu;
+    public final static String POI_ID = "poiId";
     private static final String MAPFILE = "malaysia_singapore_brunei.map";
     private static final String TAG = "MainActivity";
+
     static final int SEARCH_REQUEST = 1;
+    static final int ROUTE_REQUEST = 2;
     private ProgressDialog progressDialog;
     private MapView mapView;
     private TileCache tileCache;
     private TileRendererLayer tileRendererLayer;
+    private GraphHopper hopper;
+    private File mapsFolder = new File(Environment.getExternalStorageDirectory(),"malaysia_singapore_brunei-gh");
     private BroadcastReceiver broadcastReceiver = new LocationReceiver();
     private GPSTracker gps;
+
+    //Activity Life cycle - Start
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         AndroidGraphicFactory.createInstance(getApplication());
         setContentView(R.layout.activity_main);
-        IntentFilter filter = new IntentFilter("LOCATIONCHANGED");
-        this.registerReceiver(broadcastReceiver,filter);
+//        initBroadcastReceiver();
         initGPS();
         initMapView();
         initCenterButton();
         initProgressDialog();
         showCurrentLocation(getInitialPosition());
+        loadGraphStorage();
     }
 
     @Override
     protected void onStart(){
         super.onStart();
-
+        initBroadcastReceiver();
+//        showCurrentLocation(getInitialPosition());
     }
 
     @Override
     protected void onStop(){
         super.onStop();
-//        mapView.getLayerManager().getLayers().remove(1);
+        deInitBroadcastReceiver();
+        AndroidResourceBitmap.clearResourceBitmaps();
+    }
+
+    @Override
+    public void onDestroy(){
+        super.onDestroy();
+        gps.stopUsingGPS();
+//        deInitBroadcastReceiver();
+        destroyLayers();
+        this.tileCache.destroy();
+        this.mapView.getModel().mapViewPosition.destroy();
+        this.mapView.destroy();
+//        AndroidResourceBitmap.clearResourceBitmaps();
     }
 
     @Override
@@ -102,6 +133,7 @@ public class MainActivity extends ActionBarActivity{
         int id = item.getItemId();
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
+            Toast.makeText(this, DBHelper.getInstance(this).getLastSyncDate(),Toast.LENGTH_LONG).show();
             return true;
         }
         else if(id == R.id.action_sync){
@@ -124,18 +156,9 @@ public class MainActivity extends ActionBarActivity{
         return super.onOptionsItemSelected(item);
     }
 
-    @Override
-    public void onDestroy(){
-        super.onDestroy();
-        gps.stopUsingGPS();
-        this.unregisterReceiver(this.broadcastReceiver);
-        destroyLayers();
-        this.tileCache.destroy();
-        this.mapView.getModel().mapViewPosition.destroy();
-        this.mapView.destroy();
-        AndroidResourceBitmap.clearResourceBitmaps();
-    }
+    //Activity Lifecycle - End
 
+    //Map functions - Start
     private void destroyLayers(){
         for(Layer layer : mapView.getLayerManager().getLayers()){
             mapView.getLayerManager().getLayers().remove(layer);
@@ -153,38 +176,9 @@ public class MainActivity extends ActionBarActivity{
         createLayer();
     }
 
-    public void initCenterButton(){
-        ImageButton center = (ImageButton)(findViewById(R.id.center));
-        center.setOnClickListener(new OnClickListener(){
-            public void onClick(View v){
-                mapView.getModel().mapViewPosition.animateTo(getCurrentPosition());
-            }
-        });
-    }
-
-    public LatLong getCurrentPosition(){
-        Circle circle = (Circle)mapView.getLayerManager().getLayers().get(1);
-        if(circle != null)
-            return circle.getPosition();
-        else
-            return new LatLong(2.943332,101.875841);
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data){
-        if(requestCode == SEARCH_REQUEST){
-            if(resultCode == RESULT_OK){
-                removeAdditionalMarker();
-                String id = data.getStringExtra("poiID");
-                Toast.makeText(this,id,Toast.LENGTH_SHORT).show();
-                POI p = DBHelper.getInstance(this).getPoi(id);
-                displayMarker(p.getCoordinates());
-            }
-        }
-    }
-
     private File getMapFile(){
-        return new File(Environment.getExternalStorageDirectory(), MAPFILE);
+//        return new File(Environment.getExternalStorageDirectory(), "/malaysia_singapore_brunei-gh/"+ MAPFILE);
+        return new File(mapsFolder, MAPFILE );
     }
 
     private void createMap(){
@@ -212,6 +206,112 @@ public class MainActivity extends ActionBarActivity{
                 this.mapView.getModel().frameBufferModel.getOverdrawFactor());
     }
 
+    void loadGraphStorage(){
+
+        logUser("loading graph");
+        new GHAsyncTask<Void, Void, Path>()
+        {
+            protected Path saveDoInBackground( Void... v ) throws Exception
+            {
+                GraphHopper tmpHopp = new GraphHopper().forMobile();
+                tmpHopp.setCHShortcuts("fastest");
+//                tmpHopp.load(new File(mapsFolder, "malaysia_singapore_brunei").getAbsolutePath());
+                tmpHopp.load(new File(Environment.getExternalStorageDirectory(), "/malaysia_singapore_brunei/").getAbsolutePath());
+                Log.d(TAG,"found graph " + tmpHopp.getGraph().toString() + ", nodes:" + tmpHopp.getGraph().getNodes());
+                hopper = tmpHopp;
+                return null;
+            }
+
+            protected void onPostExecute( Path o )
+            {
+                if (hasError())
+                {
+                    logUser("An error happened while creating graph:"
+                            + getErrorMessage());
+                    Log.d(TAG,"An error happened while creating graph:"
+                            + getErrorMessage());
+                } else
+                {
+                    logUser("Finished loading graph.");
+                }
+
+            }
+        }.execute();
+    }
+
+    public void calcPath( final double fromLat, final double fromLon,
+                          final double toLat, final double toLon )
+    {
+
+//        log("calculating path ...");
+        new AsyncTask<Void, Void, GHResponse>()
+        {
+            float time;
+
+            protected GHResponse doInBackground( Void... v )
+            {
+                StopWatch sw = new StopWatch().start();
+                GHRequest req = new GHRequest(fromLat, fromLon, toLat, toLon).
+                        setAlgorithm("dijkstrabi").
+                        putHint("instructions", false).
+                        putHint("douglas.minprecision", 1);
+                GHResponse resp = hopper.route(req);
+                time = sw.stop().getSeconds();
+                return resp;
+            }
+
+            protected void onPostExecute( GHResponse resp )
+            {
+                if (!resp.hasErrors())
+                {
+//                    log("from:" + fromLat + "," + fromLon + " to:" + toLat + ","
+//                            + toLon + " found path with distance:" + resp.getDistance()
+//                            / 1000f + ", nodes:" + resp.getPoints().getSize() + ", time:"
+//                            + time + " " + resp.getDebugInfo());
+//                    logUser("the route is " + (int) (resp.getDistance() / 100) / 10f
+//                            + "km long, time:" + resp.getMillis() / 60000f + "min, debug:" + time);
+
+                    mapView.getLayerManager().getLayers().add(createPolyline(resp));
+                    Log.d(TAG, "Size of layers" + mapView.getLayerManager().getLayers().size());
+                    //mapView.redraw();
+                } else
+                {
+                    logUser("Error:" + resp.getErrors());
+                }
+//                shortestPathRunning = false;
+            }
+        }.execute();
+    }
+
+    private Polyline createPolyline( GHResponse response )
+    {
+        Paint paintStroke = AndroidGraphicFactory.INSTANCE.createPaint();
+        paintStroke.setStyle(Style.STROKE);
+        paintStroke.setColor(Color.BLUE);
+        paintStroke.setDashPathEffect(new float[]
+                {
+                        25, 15
+                });
+        paintStroke.setStrokeWidth(8);
+
+        // TODO: new mapsforge version wants an mapsforge-paint, not an android paint.
+        // This doesn't seem to support transparceny
+        //paintStroke.setAlpha(128);
+        Polyline line = new Polyline((org.mapsforge.core.graphics.Paint) paintStroke, AndroidGraphicFactory.INSTANCE);
+        List<LatLong> geoPoints = line.getLatLongs();
+        PointList tmp = response.getPoints();
+        for (int i = 0; i < response.getPoints().getSize(); i++)
+        {
+            geoPoints.add(new LatLong(tmp.getLatitude(i), tmp.getLongitude(i)));
+        }
+
+        return line;
+    }
+
+    private void logUser( String str ){
+        Toast.makeText(this, str, Toast.LENGTH_SHORT).show();
+    }
+
     private LatLong getInitialPosition(){
         if(gps.canGetLocation()){
             return new LatLong(gps.getLatitude(),gps.getLongitude());
@@ -234,28 +334,19 @@ public class MainActivity extends ActionBarActivity{
         circle.requestRedraw();
     }
 
-    public class LocationReceiver extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent){
-            Log.d(TAG, "Receive broadcast");
-            LatLong coordinates = new LatLong(intent.getDoubleExtra("latitude", 0), intent.getDoubleExtra("longitude",0));
-            Log.d(TAG,"Latitude:"+ coordinates.latitude + " Longitude:"+ coordinates.longitude);
-            updateLocation(coordinates);
-        }
-    }
-
-    public void displayMarker(LatLong coordinates){
-        Marker marker = createTappableMarker(this,R.drawable.marker_red, coordinates);
+    public void displayMarker(String id,LatLong coordinates){
+        PoiMarker marker = createTappableMarker(this,R.drawable.marker_red, coordinates, id);
         mapView.getLayerManager().getLayers().add(marker);
         mapView.getModel().mapViewPosition.animateTo(coordinates);
     }
 
-    public Marker createTappableMarker(Context c, int resourceIdentifier,
-                                       LatLong latLong) {
+    public PoiMarker createTappableMarker(Context c, int resourceIdentifier,
+                                       LatLong latLong, String id) {
         Drawable drawable = c.getResources().getDrawable(resourceIdentifier);
         Bitmap bitmap = AndroidGraphicFactory.convertToBitmap(drawable);
         bitmap.incrementRefCount();
-        return new Marker(latLong, bitmap, 0, -bitmap.getHeight() / 2) {
+//        return new Marker(latLong, bitmap, 0, -bitmap.getHeight() / 2) {
+        return new PoiMarker(latLong, bitmap, 0, -bitmap.getHeight() /2, id) {
             @Override
             public boolean onTap(LatLong geoPoint, Point viewPosition,
                                  Point tapPoint) {
@@ -263,7 +354,8 @@ public class MainActivity extends ActionBarActivity{
                     Log.w("Tap", "The Marker was touched with onTap: "
                             + this.getLatLong().toString());
                     Intent intent = new Intent(MainActivity.this, DetailsActivity.class);
-                    startActivity(intent);
+                    intent.putExtra(POI_ID, this.getId());
+                    startActivityForResult(intent, ROUTE_REQUEST);
                     return true;
                 }
                 return false;
@@ -271,11 +363,69 @@ public class MainActivity extends ActionBarActivity{
         };
     }
 
-    public void removeAdditionalMarker(){
-        if(mapView.getLayerManager().getLayers().size() == 3){
+    public void removeAdditionalLayers(){
+        while(mapView.getLayerManager().getLayers().size() > 2){
             Layer extra = mapView.getLayerManager().getLayers().get(2);
             mapView.getLayerManager().getLayers().remove(extra);
             extra.onDestroy();
+        }
+    }
+
+    //Map functions - End
+
+    public void initCenterButton(){
+        ImageButton center = (ImageButton)(findViewById(R.id.center));
+        center.setOnClickListener(new OnClickListener(){
+            public void onClick(View v){
+                mapView.getModel().mapViewPosition.animateTo(getCurrentPosition());
+            }
+        });
+    }
+
+    public void initBroadcastReceiver(){
+        IntentFilter filter = new IntentFilter("LOCATIONCHANGED");
+        this.registerReceiver(broadcastReceiver,filter);
+    }
+
+    public void deInitBroadcastReceiver(){
+        this.unregisterReceiver(this.broadcastReceiver);
+    }
+
+    public LatLong getCurrentPosition(){
+        Circle circle = (Circle)mapView.getLayerManager().getLayers().get(1);
+        if(circle != null)
+            return circle.getPosition();
+        else
+            return new LatLong(2.943332,101.875841);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data){
+        if(requestCode == SEARCH_REQUEST){
+            if(resultCode == RESULT_OK){
+                removeAdditionalLayers();
+                String id = data.getStringExtra("poiID");
+//                Toast.makeText(this,id,Toast.LENGTH_SHORT).show();
+                POI p = DBHelper.getInstance(this).getPoi(id);
+                displayMarker(p.getId(),p.getCoordinates());
+            }
+        }
+        else if(requestCode == ROUTE_REQUEST){
+            if(resultCode == RESULT_OK){
+                String id = data.getStringExtra("poiID");
+                Toast.makeText(this,id,Toast.LENGTH_SHORT).show();
+                calcPath(3.090687,101.7270185,2.945219,101.874778);
+            }
+        }
+    }
+
+    public class LocationReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent){
+            Log.d(TAG, "Receive broadcast");
+            LatLong coordinates = new LatLong(intent.getDoubleExtra("latitude", 0), intent.getDoubleExtra("longitude",0));
+            Log.d(TAG,"Latitude:"+ coordinates.latitude + " Longitude:"+ coordinates.longitude);
+            updateLocation(coordinates);
         }
     }
 
@@ -289,12 +439,19 @@ public class MainActivity extends ActionBarActivity{
         AsyncHttpClient client = new AsyncHttpClient();
         RequestParams params = new RequestParams();
         String date = DBHelper.getInstance(this).getLastSyncDate();
+        if( date == null){
+            Log.d(TAG, "Date is null");
+        }
+        else {
+            Log.d(TAG, date);
+        }
         params.put("date",date);
         progressDialog.show();
-        client.post("http://g53ids-env.elasticbeanstalk.com/test.php", params, new AsyncHttpResponseHandler(){
+        client.post("http://g53ids-env.elasticbeanstalk.com/syncDatabase.php", params, new AsyncHttpResponseHandler(){
             @Override
             public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
-//                Toast.makeText(getApplicationContext(), new String(responseBody), Toast.LENGTH_LONG).show();
+//                Log.d(TAG,new String(responseBody));
+                getSyncDatetime();
                 saveNewData(new String(responseBody));
                 progressDialog.dismiss();
             }
@@ -302,14 +459,8 @@ public class MainActivity extends ActionBarActivity{
             @Override
             public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
                 progressDialog.dismiss();
-                if (statusCode == 404) {
-                    Toast.makeText(getApplicationContext(), "Requested resource not found", Toast.LENGTH_LONG).show();
-                } else if (statusCode == 500) {
-                    Toast.makeText(getApplicationContext(), "Something went wrong at server end", Toast.LENGTH_LONG).show();
-                } else {
-                    Toast.makeText(getApplicationContext(), "Unexpected Error occcured! [Most common Error: Device might not be connected to Internet]",
-                            Toast.LENGTH_LONG).show();
-                }
+                failureAction(statusCode);
+                Log.d(TAG, "Failure in getting data");
             }
         });
     }
@@ -348,6 +499,38 @@ public class MainActivity extends ActionBarActivity{
 
         }catch(JSONException e){
             e.printStackTrace();
+        }
+    }
+
+    public void getSyncDatetime(){
+        AsyncHttpClient client = new AsyncHttpClient();
+        RequestParams params = new RequestParams();
+        client.post("http://g53ids-env.elasticbeanstalk.com/getDatetime.php", params, new AsyncHttpResponseHandler(){
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+               saveSyncDatetime(new String(responseBody));
+            }
+
+            @Override
+            public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                failureAction(statusCode);
+                Log.d(TAG, "Failure in getting time");
+            }
+        });
+    }
+
+    public void saveSyncDatetime(String syncDatetime){
+        DBHelper.getInstance(this).updateSyncDatetime(syncDatetime);
+    }
+
+    public void failureAction(int statusCode){
+        if (statusCode == 404) {
+            Toast.makeText(getApplicationContext(), "Requested resource not found", Toast.LENGTH_LONG).show();
+        } else if (statusCode == 500) {
+            Toast.makeText(getApplicationContext(), "Something went wrong at server end", Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(getApplicationContext(), "Unexpected Error occcured! [Most common Error: Device might not be connected to Internet]",
+                    Toast.LENGTH_LONG).show();
         }
     }
 

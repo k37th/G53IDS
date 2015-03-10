@@ -1,6 +1,7 @@
 package com.keith.android.g53ids;
 
 import android.content.Context;
+import android.content.Intent;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -14,10 +15,14 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import com.keith.android.g53ids.database.DBHelper;
 
 
 public class AddActivity extends ActionBarActivity implements AdapterView.OnItemSelectedListener{
     private static final String TAG = "AddActivity";
+    static final int SELECT_COORDINATES_REQUEST = 1;
     private EditText poiName;
     private EditText poiContact;
     private Spinner poiGroup;
@@ -39,6 +44,7 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         setContentView(R.layout.activity_add);
         initView();
         initSpinner();
+        initSelectCoordinatesButton();
         initSubmitButton();
     }
 
@@ -85,6 +91,18 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         return super.onOptionsItemSelected(item);
     }
 
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data){
+        if(requestCode == SELECT_COORDINATES_REQUEST){
+            if(resultCode == RESULT_OK){
+                double latitude = data.getDoubleExtra("latitude",0);
+                double longitude = data.getDoubleExtra("longitude",0);
+                poiLatitude.setText(Double.toString(latitude));
+                poiLongitude.setText(Double.toString(longitude));
+            }
+        }
+    }
+
     public void onItemSelected(AdapterView<?> parent, View view,
                                int pos, long id) {
         // An item was selected. You can retrieve the selected item using
@@ -105,7 +123,19 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
                 TextView fieldTextView[] = {poiLatitude,poiLongitude};
                 if(!gotEmptyInputs(fieldEditText) && !gotEmptyInputs(fieldTextView)){
                     getInputValues(fieldEditText);
+//                    getInputValues(fieldTextView);
                 }
+            }
+        });
+    }
+
+    public void initSelectCoordinatesButton(){
+        Button selectCoordinates = (Button)findViewById(R.id.select_coordinates);
+        selectCoordinates.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(AddActivity.this, SelectActivity.class);
+                startActivityForResult(intent, SELECT_COORDINATES_REQUEST);
             }
         });
     }
@@ -153,15 +183,13 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
 
     public void getInputValues(EditText[] fields){
         for(int i=0; i < fields.length; i++){
-            if(i==2){
-                Log.d(TAG,"Value of field is "+ Integer.parseInt(fields[i].getText().toString()));
-            }
-            else if(i == 5 || i == 6){
-                Log.d(TAG,"Value of field is "+ Double.parseDouble(fields[i].getText().toString()));
-            }
-            else{
                 Log.d(TAG,"Value of field is "+ fields[i].getText().toString());
             }
+    }
+
+    public void getInputValues(TextView[] fields){
+        for(int i=0; i < fields.length; i++){
+            Log.d(TAG,"Value of field is "+ fields[i].getText().toString());
         }
     }
 }

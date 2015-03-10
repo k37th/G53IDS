@@ -114,7 +114,7 @@ public class DBHelper extends SQLiteOpenHelper{
 
     public static DBHelper getInstance(Context context){
         if(dbHelper == null){
-            dbHelper = new DBHelper(context,DB_NAME,null,DB_VERSION);
+            dbHelper = new DBHelper(context.getApplicationContext(),DB_NAME,null,DB_VERSION);
         }
         return dbHelper;
     }
@@ -237,7 +237,8 @@ public class DBHelper extends SQLiteOpenHelper{
         cv.put(POI_LONGITUDE, p.getCoordinates().longitude);
 
         this.openWritableDB();
-        long rowID = db.insert(POI_TABLE, null, cv);
+        long rowID = db.replace(POI_TABLE, null, cv);
+//        long rowID = db.insert(POI_TABLE, null, cv);
         this.closeDB();
 
         return rowID;
@@ -257,5 +258,14 @@ public class DBHelper extends SQLiteOpenHelper{
         closeDB();
 
         return date;
+    }
+
+    public void updateSyncDatetime(String datetime){
+        ContentValues cv = new ContentValues();
+        cv.put(SYNC_ID, "1");
+        cv.put(SYNC_DATE, datetime);
+        this.openWritableDB();
+        db.replace(LAST_SYNC_TABLE, null, cv);
+        closeDB();
     }
 }

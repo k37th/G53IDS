@@ -1,5 +1,6 @@
 package com.keith.android.g53ids.gps;
 
+import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
