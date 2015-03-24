@@ -238,8 +238,8 @@ public class MainActivity extends ActionBarActivity{
             }
         }.execute();
     }
-
-    public void calcPath( final double fromLat, final double fromLon,
+//    final double fromLat, final double fromLon
+    public void calcPath( final LatLong fromLoc,
                           final double toLat, final double toLon )
     {
 
@@ -251,7 +251,7 @@ public class MainActivity extends ActionBarActivity{
             protected GHResponse doInBackground( Void... v )
             {
                 StopWatch sw = new StopWatch().start();
-                GHRequest req = new GHRequest(fromLat, fromLon, toLat, toLon).
+                GHRequest req = new GHRequest(fromLoc.latitude, fromLoc.longitude, toLat, toLon).
                         setAlgorithm("dijkstrabi").
                         putHint("instructions", false).
                         putHint("douglas.minprecision", 1);
@@ -414,7 +414,7 @@ public class MainActivity extends ActionBarActivity{
             if(resultCode == RESULT_OK){
                 String id = data.getStringExtra("poiID");
                 Toast.makeText(this,id,Toast.LENGTH_SHORT).show();
-                calcPath(3.090687,101.7270185,2.945219,101.874778);
+                calcPath(getCurrentPosition(),2.945219,101.874778);
             }
         }
     }

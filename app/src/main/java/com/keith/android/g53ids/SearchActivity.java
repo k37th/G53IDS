@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.SearchManager;
 import android.content.Context;
 import android.content.Intent;
+import android.os.AsyncTask;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.support.v7.widget.SearchView;
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 
 
 public class SearchActivity extends ActionBarActivity{
+    private final static String TAG = "SearchActivity";
     private ResultAdapter adapter;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -87,7 +89,8 @@ public class SearchActivity extends ActionBarActivity{
     private void handleIntent(Intent intent){
         if(Intent.ACTION_SEARCH.equals(intent.getAction())){
             String query = intent.getStringExtra(SearchManager.QUERY);
-            processQuery(query);
+//            processQuery(query);
+            new processSearch().execute(query);
         }
     }
 
@@ -118,5 +121,28 @@ public class SearchActivity extends ActionBarActivity{
             }
         }
         adapter.notifyDataSetChanged();
+    }
+
+    private class processSearch extends AsyncTask<String, Void, ArrayList<POI>>{
+        protected ArrayList<POI> doInBackground(String... query){
+            Log.d(TAG, "Doing in background");
+            ResultList.getInstance().clear();
+            ArrayList<POI>poiList = DBHelper.getInstance(SearchActivity.this).getPois(query[0]);
+            return poiList;
+
+        }
+
+        protected void onPostExecute(ArrayList<POI> list){
+            Log.d(TAG, "Post execution started");
+            if(list.isEmpty()) {
+                ResultList.getInstance().add(new POI("0","No results found",new LatLong(0,0)));
+            }
+            else {
+                for (POI x : list) {
+                    ResultList.getInstance().add(x);
+                }
+            }
+            adapter.notifyDataSetChanged();
+        }
     }
 }

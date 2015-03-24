@@ -1,9 +1,14 @@
 package com.keith.android.g53ids;
 
+import java.util.ArrayList;
 import java.util.Locale;
 
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.content.Intent;
+import android.os.Handler;
+import android.support.v4.app.ListFragment;
+import android.support.v4.widget.SwipeRefreshLayout;
 import android.support.v7.app.ActionBarActivity;
 import android.support.v7.app.ActionBar;
 import android.support.v4.app.Fragment;
@@ -12,23 +17,31 @@ import android.support.v4.app.FragmentTransaction;
 import android.support.v4.app.FragmentPagerAdapter;
 import android.os.Bundle;
 import android.support.v4.view.ViewPager;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.keith.android.g53ids.database.DBHelper;
+import com.loopj.android.http.AsyncHttpClient;
+import com.loopj.android.http.AsyncHttpResponseHandler;
+import com.loopj.android.http.RequestParams;
 
-import org.w3c.dom.Comment;
-import org.w3c.dom.Text;
-
+import org.apache.http.Header;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.mapsforge.core.model.LatLong;
 
 public class DetailsActivity extends ActionBarActivity {
 
@@ -106,7 +119,9 @@ public class DetailsActivity extends ActionBarActivity {
                 case 0:
                     return DetailsFragment.newInstance(position+1, poi_id);
                 case 1:
-                    return CommentFragment.newInstance(position + 1);
+                    return TagsFragment.newInstance(position + 1, poi_id);
+                case 2:
+                    return CommentFragment.newInstance(position + 1, poi_id);
             }
             return null;
         }
@@ -114,7 +129,7 @@ public class DetailsActivity extends ActionBarActivity {
         @Override
         public int getCount() {
             // Show 2 total pages.
-            return 2;
+            return 3;
         }
 
         @Override
@@ -124,46 +139,14 @@ public class DetailsActivity extends ActionBarActivity {
                 case 0:
                     return "Information";
                 case 1:
+                    return "Tags";
+                case 2:
                     return "Comments";
 
             }
             return null;
         }
     }
-
-    /**
-     * A placeholder fragment containing a simple view.
-     */
-    public static class CommentFragment extends Fragment {
-        /**
-         * The fragment argument representing the section number for this
-         * fragment.
-         */
-        private static final String ARG_SECTION_NUMBER = "section_number";
-
-        /**
-         * Returns a new instance of this fragment for the given section
-         * number.
-         */
-        public static CommentFragment newInstance(int sectionNumber) {
-            CommentFragment fragment = new CommentFragment();
-            Bundle args = new Bundle();
-            args.putInt(ARG_SECTION_NUMBER, sectionNumber);
-            fragment.setArguments(args);
-            return fragment;
-        }
-
-        public CommentFragment() {
-        }
-
-        @Override
-        public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                                 Bundle savedInstanceState) {
-            View rootView = inflater.inflate(R.layout.fragment_details, container, false);
-            return rootView;
-        }
-    }
-
 
     /**
      *Fragment for details
@@ -236,4 +219,248 @@ public class DetailsActivity extends ActionBarActivity {
         }
     }
 
+    /**
+     *Fragment for details
+     */
+    public static class TagsFragment extends Fragment {
+        /**
+         * The fragment argument representing the section number for this
+         * fragment.
+         */
+        private static final String ARG_SECTION_NUMBER = "section_number";
+        private static final String ARG_POI_ID = "poi_id";
+        /**
+         * Returns a new instance of this fragment for the given section
+         * number.
+         */
+        public static TagsFragment newInstance(int sectionNumber, String id) {
+            TagsFragment fragment = new TagsFragment();
+            Bundle args = new Bundle();
+            args.putInt(ARG_SECTION_NUMBER, sectionNumber);
+            args.putString(ARG_POI_ID, id);
+            fragment.setArguments(args);
+            return fragment;
+        }
+
+        public TagsFragment() {
+        }
+
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                                 Bundle savedInstanceState) {
+            View rootView = inflater.inflate(R.layout.fragment_tags, container, false);
+            LinearLayout tagBoard = (LinearLayout)rootView.findViewById(R.id.tag_board);
+            LinearLayout templateRow = (LinearLayout)inflater.inflate(R.layout.btn_row_template, null);
+            for(int i=0;i<3;i++){
+                Button btn = (Button)inflater.inflate(R.layout.button_template, null);
+                btn.setText("Button 1");
+                templateRow.addView(btn);
+            }
+            tagBoard.addView(templateRow);
+            return rootView;
+        }
+    }
+
+    /**
+     * A placeholder fragment containing a simple view.
+     */
+    public static class CommentFragment extends ListFragment {
+        /**
+         * The fragment argument representing the section number for this
+         * fragment.
+         */
+        private static final String TAG = "CommentFragment";
+        private static final String ARG_SECTION_NUMBER = "section_number";
+        private static final String ARG_POI_ID = "poi_id";
+        private String poi_id;
+        private ArrayList<Comment> mComments;
+        private ProgressDialog syncDialog;
+        private SwipeRefreshLayout swipeView;
+        private CommentAdapter adapter;
+        /**
+         * Returns a new instance of this fragment for the given section
+         * number.
+         */
+        public static CommentFragment newInstance(int sectionNumber, String id) {
+            CommentFragment fragment = new CommentFragment();
+            Bundle args = new Bundle();
+            args.putInt(ARG_SECTION_NUMBER, sectionNumber);
+            args.putString(ARG_POI_ID, id);
+            fragment.setArguments(args);
+            return fragment;
+        }
+
+        public CommentFragment() {
+        }
+
+        @Override
+        public void onCreate(Bundle savedInstance){
+            super.onCreate(savedInstance);
+            Log.d(TAG, "Create is called");
+            initSyncDialog();
+            mComments = new ArrayList<>();
+            Bundle bundle = getArguments();
+            poi_id = bundle.getString(ARG_POI_ID);
+//            retrieveComments(bundle.getString(ARG_POI_ID));
+            adapter = new CommentAdapter(mComments);
+            setListAdapter(adapter);
+        }
+
+        @Override
+        public void onStart(){
+            super.onStart();
+            Log.d(TAG, "Start is called");
+        }
+
+        @Override
+        public void onResume(){
+            super.onResume();
+            Log.d(TAG, "Resume is called");
+        }
+
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                                 Bundle savedInstanceState) {
+            View rootView = inflater.inflate(R.layout.fragment_comment, container, false);
+            swipeView = (SwipeRefreshLayout)rootView.findViewById(R.id.swipe);
+            swipeView.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
+                @Override
+                public void onRefresh() {
+//                    swipeView.setRefreshing(true);
+//                    Toast.makeText(getActivity(),"Refresh started",Toast.LENGTH_SHORT).show();
+//                    (new Handler()).postDelayed(new Runnable() {
+//                        @Override
+//                        public void run() {
+//                            swipeView.setRefreshing(false);
+//                            Toast.makeText(getActivity(),"Refresh completed",Toast.LENGTH_SHORT).show();
+//                        }
+//                    }, 3000);
+                    retrieveComments(poi_id);
+                }
+            });
+            final EditText text = (EditText)rootView.findViewById(R.id.comment_text);
+            Button submit = (Button)rootView.findViewById(R.id.submit);
+            submit.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    String commentText = text.getText().toString();
+                    Log.d(TAG, commentText);
+                    postComment(commentText);
+                }
+            });
+            return rootView;
+        }
+
+        public void initSyncDialog(){
+            syncDialog = new ProgressDialog(getActivity());
+            syncDialog.setMessage("Retrieving Comments");
+            syncDialog.setCancelable(false);
+        }
+
+        private class CommentAdapter extends ArrayAdapter<Comment> {
+            public CommentAdapter(ArrayList<Comment> comments){
+                super(getActivity(),0,comments);
+            }
+
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent){
+                if(convertView == null){
+                    convertView = getActivity().getLayoutInflater().inflate(R.layout.list_item_comment, null);
+                }
+
+                Comment comment = getItem(position);
+                TextView date = (TextView)convertView.findViewById(R.id.comment_list_date);
+                TextView text = (TextView)convertView.findViewById(R.id.comment_list_text);
+                date.setText(comment.getdate());
+                text.setText(comment.getText());
+                return convertView;
+            }
+        }
+
+        private void retrieveComments(String id){
+            AsyncHttpClient client = new AsyncHttpClient();
+            RequestParams params = new RequestParams();
+            params.put("id",id);
+//            syncDialog.show();
+            swipeView.setRefreshing(true);
+            client.post("http://g53ids-env.elasticbeanstalk.com/retrieveAllComments.php", params, new AsyncHttpResponseHandler(){
+                @Override
+                public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+                    clearComments();
+                    processComments(new String(responseBody));
+                    Log.d(TAG, "Success in retrieving comments");
+                    adapter.notifyDataSetChanged();
+//                    syncDialog.dismiss();
+                    swipeView.setRefreshing(false);
+                }
+
+                @Override
+                public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                    failureAction(statusCode);
+                    Log.d(TAG, "Failure in retrieving comments");
+//                    syncDialog.dismiss();
+                    swipeView.setRefreshing(false);
+                }
+            });
+
+        }
+
+        public void failureAction(int statusCode){
+            if (statusCode == 404) {
+                Toast.makeText(getActivity(), "Requested resource not found", Toast.LENGTH_LONG).show();
+            } else if (statusCode == 500) {
+                Toast.makeText(getActivity(), "Something went wrong at server end", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(getActivity(), "Unexpected Error occurred! [Most common Error: Device might not be connected to Internet]",
+                        Toast.LENGTH_LONG).show();
+            }
+        }
+
+        public void processComments(String responseBody){
+            try{
+                JSONArray arr = new JSONArray(responseBody);
+                if(arr.length() != 0){
+                    for(int i=0; i<arr.length();i++){
+                        JSONObject object = (JSONObject)arr.get(i);
+                        Comment c = new Comment(object.get("Date").toString(), object.get("Text").toString());
+                        mComments.add(c);
+                    }
+                }
+
+            }catch(JSONException e){
+                e.printStackTrace();
+            }
+        }
+
+        private void clearComments(){
+            mComments.clear();
+        }
+
+        public void postComment(String text){
+            AsyncHttpClient client = new AsyncHttpClient();
+            RequestParams params = new RequestParams();
+            params.put("id", poi_id);
+            params.put("text", text);
+            client.post("http://g53ids-env.elasticbeanstalk.com/insertNewComment.php", params, new AsyncHttpResponseHandler(){
+                @Override
+                public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+                    String response = new String(responseBody);
+                    if(response.equals("true")) {
+                        Toast.makeText(getActivity(), "Comment posted!", Toast.LENGTH_LONG).show();
+                    }
+                    else{
+                        Toast.makeText(getActivity(), "Comment not posted!", Toast.LENGTH_LONG).show();
+                    }
+                    Log.d(TAG, "Comment posted successfully");
+
+                }
+
+                @Override
+                public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                    failureAction(statusCode);
+                    Log.d(TAG, "Failed to post comment");
+                }
+            });
+        }
+    }
 }
