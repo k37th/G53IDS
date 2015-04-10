@@ -24,6 +24,7 @@ import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.RequestParams;
 
 import org.apache.http.Header;
+import org.mapsforge.core.model.LatLong;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
@@ -46,13 +47,14 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
     private CheckBox poiSundayOpen;
     private TextView poiLatitude;
     private TextView poiLongitude;
-
+    NumberFormat formatter = new DecimalFormat("#0.00000000");
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_add);
         initView();
         initSpinner();
+        initUseCurrentCoordinatesButton();
         initSelectCoordinatesButton();
         initSubmitButton();
     }
@@ -112,7 +114,7 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
     protected void onActivityResult(int requestCode, int resultCode, Intent data){
         if(requestCode == SELECT_COORDINATES_REQUEST){
             if(resultCode == RESULT_OK){
-                NumberFormat formatter = new DecimalFormat("#0.00000000");
+//                NumberFormat formatter = new DecimalFormat("#0.00000000");
                 double latitude = data.getDoubleExtra("latitude", 0);
                 double longitude = data.getDoubleExtra("longitude",0);
 //                poiLatitude.setText(Double.toString(latitude));
@@ -160,6 +162,27 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
             public void onClick(View v) {
                 Intent intent = new Intent(AddActivity.this, SelectActivity.class);
                 startActivityForResult(intent, SELECT_COORDINATES_REQUEST);
+            }
+        });
+    }
+
+    public void initUseCurrentCoordinatesButton(){
+        Button currentCoordinates = (Button)findViewById(R.id.current_coordinates);
+        currentCoordinates.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if(!UserLocation.getInstance().nullLocation()) {
+                    LatLong l = UserLocation.getInstance().getLocation();
+//                    poiLatitude.setText(Double.toString(l.latitude));
+//                    poiLongitude.setText(Double.toString(l.longitude));
+                    double latitude = l.latitude;
+                    double longitude = l.longitude;
+                    poiLatitude.setText(formatter.format(latitude));
+                    poiLongitude.setText(formatter.format(longitude));
+                }
+                else{
+                    Toast.makeText(getApplicationContext(),"Failed to retrieve current location",Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }

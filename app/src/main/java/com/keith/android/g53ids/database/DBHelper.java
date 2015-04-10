@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
 import com.keith.android.g53ids.POI;
+import com.keith.android.g53ids.Tag;
 
 import org.mapsforge.core.model.LatLong;
 
@@ -109,6 +110,30 @@ public class DBHelper extends SQLiteOpenHelper{
     public static final String DROP_LAST_SYNC_TABLE =
             "DROP TABLE IF EXISTS " + LAST_SYNC_TABLE;
 
+    public static final String TAG_TABLE ="tag";
+
+    public static final String TAG_ID = "tag_id";
+    public static final int TAG_ID_COL = 0;
+
+    public static final String TAG_NAME = "tag_name";
+    public static final int TAG_NAME_COL = 1;
+
+    public static final String TAG_POI = "tag_poi";
+    public static final int TAG_POI_COL = 2;
+
+    public static final String TAG_FLAG = "tag_flag";
+    public static final int TAG_FLAG_COL = 3;
+
+    public static final String CREATE_TAG_TABLE =
+            "CREATE TABLE " + TAG_TABLE + "(" +
+                    TAG_ID + " TEXT NOT NULL," +
+                    TAG_NAME + " TEXT NOT NULL," +
+                    TAG_POI + " TEXT NOT NULL," +
+                    TAG_FLAG + " INTEGER NOT NULL" + ");";
+
+    public static final String DROP_TAG_TABLE =
+            "DROP TABLE IF EXISTS " + TAG_TABLE;
+
     private SQLiteDatabase db;
     private static DBHelper dbHelper;
 
@@ -127,6 +152,7 @@ public class DBHelper extends SQLiteOpenHelper{
     public void onCreate(SQLiteDatabase db){
         db.execSQL(CREATE_POI_TABLE);
         db.execSQL(CREATE_LAST_SYNC_TABLE);
+        db.execSQL(CREATE_TAG_TABLE);
 //        db.execSQL("INSERT INTO poi VALUES (1, 'Secret Recipe', 2.945219, 101.874778)");
 //        db.execSQL("INSERT INTO poi VALUES (2, 'Econsave', 2.945846, 101.846540)");
 //        db.execSQL("INSERT INTO poi VALUES (3, 'Maybank', 2.947723, 101.846717)");
@@ -138,6 +164,7 @@ public class DBHelper extends SQLiteOpenHelper{
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion){
         db.execSQL(DBHelper.DROP_POI_TABLE);
         db.execSQL(DBHelper.DROP_LAST_SYNC_TABLE);
+        db.execSQL(DBHelper.DROP_TAG_TABLE);
         onCreate(db);
     }
 
@@ -267,5 +294,54 @@ public class DBHelper extends SQLiteOpenHelper{
         this.openWritableDB();
         db.replace(LAST_SYNC_TABLE, null, cv);
         closeDB();
+    }
+
+    public long insertTag(Tag t){
+        ContentValues cv = new ContentValues();
+        cv.put(TAG_ID, t.getId());
+        cv.put(TAG_NAME, t.getName());
+        cv.put(TAG_POI, t.getPoi());
+        cv.put(TAG_FLAG, t.getFlag());
+
+        this.openWritableDB();
+        long rowID = db.replace(TAG_TABLE, null, cv);
+//        long rowID = db.insert(POI_TABLE, null, cv);
+        this.closeDB();
+
+        return rowID;
+    }
+
+    public ArrayList<Tag> getTags(String poi){
+        String where = TAG_POI + " = ? AND " + TAG_FLAG + " = ?" ;
+        String[] whereArgs = new String[] {poi, "0"};
+        this.openReadableDB();
+        Cursor cursor = db.query(TAG_TABLE, null, where, whereArgs, null, null, null);
+        ArrayList<Tag> tags = new ArrayList<Tag>();
+        while(cursor.moveToNext()){
+            tags.add(getTagFromCursor(cursor));
+        }
+        if(cursor != null)
+            cursor.close();
+        closeDB();
+        return tags;
+    }
+
+    private static Tag getTagFromCursor(Cursor cursor){
+        if(cursor == null || cursor.getCount() == 0){
+            return null;
+        }
+        else{
+            try{
+                Tag tag = new Tag(
+                        cursor.getString(TAG_ID_COL),
+                        cursor.getString(TAG_NAME_COL),
+                        cursor.getString(TAG_POI_COL),
+                        cursor.getInt(TAG_FLAG_COL));
+                return tag;
+            }
+            catch(Exception e){
+                return null;
+            }
+        }
     }
 }

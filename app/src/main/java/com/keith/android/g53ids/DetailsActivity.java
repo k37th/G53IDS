@@ -4,7 +4,10 @@ import java.util.ArrayList;
 import java.util.Locale;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Handler;
 import android.support.v4.app.ListFragment;
@@ -24,10 +27,13 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
+import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.GridView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -229,6 +235,11 @@ public class DetailsActivity extends ActionBarActivity {
          */
         private static final String ARG_SECTION_NUMBER = "section_number";
         private static final String ARG_POI_ID = "poi_id";
+        private static final String TAG = "TagFragment";
+        private String poi_id;
+        private TagAdapter adapter;
+        private ArrayList<Tag> mTags;
+        private EditText tagName;
         /**
          * Returns a new instance of this fragment for the given section
          * number.
@@ -246,18 +257,186 @@ public class DetailsActivity extends ActionBarActivity {
         }
 
         @Override
+        public void onCreate(Bundle savedInstance){
+            super.onCreate(savedInstance);
+            Bundle bundle = getArguments();
+            poi_id = bundle.getString(ARG_POI_ID);
+        }
+
+        @Override
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                                  Bundle savedInstanceState) {
-            View rootView = inflater.inflate(R.layout.fragment_tags, container, false);
-            LinearLayout tagBoard = (LinearLayout)rootView.findViewById(R.id.tag_board);
-            LinearLayout templateRow = (LinearLayout)inflater.inflate(R.layout.btn_row_template, null);
-            for(int i=0;i<3;i++){
-                Button btn = (Button)inflater.inflate(R.layout.button_template, null);
-                btn.setText("Button 1");
-                templateRow.addView(btn);
+            mTags = DBHelper.getInstance(getActivity()).getTags(poi_id);
+            for( Tag x : mTags){
+                Log.d(TAG, x.displayTag());
             }
-            tagBoard.addView(templateRow);
+            View rootView = inflater.inflate(R.layout.fragment_tags, container, false);
+//            LinearLayout tagBoard = (LinearLayout)rootView.findViewById(R.id.tag_board);
+//            LinearLayout templateRow = (LinearLayout)inflater.inflate(R.layout.btn_row_template, null);
+//            LinearLayout.LayoutParams param = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+//                    ViewGroup.LayoutParams.MATCH_PARENT, 1.0f);
+
+//            ArrayList<LinearLayout> rows = new ArrayList<>();
+//            int j=0;
+//            for(int i=0; i<mTags.size(); i++){
+//            for(int i=0; i<5; i++){
+//                if(j==0){
+//                    rows.add((LinearLayout)inflater.inflate(R.layout.btn_row_template,null));
+//                    j++;
+//                }
+//                else if(i>0){
+//                    if( (i-1) % 3 == 0){
+//                        rows.add((LinearLayout)inflater.inflate(R.layout.btn_row_template,null));
+//                        j++;
+//                    }
+//                }
+//                Button btn = new Button(getActivity());
+//                btn.setLayoutParams(param);
+//                btn.setText(mTags.get(i).getName());
+//                btn.setText("Button "+ i);
+//                rows.get(j-1).addView(btn);
+//            }
+
+//            for (LinearLayout row : rows){
+//                tagBoard.addView(row);
+//            }
+
+            GridView tagView = (GridView)rootView.findViewById(R.id.tagGrid);
+            adapter = new TagAdapter(mTags);
+            tagView.setAdapter(adapter);
+
+            tagName = (EditText)rootView.findViewById(R.id.tag_text);
+            Button submit = (Button)rootView.findViewById(R.id.submit);
+            submit.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    String newTag = tagName.getText().toString();
+                    Log.d(TAG, newTag);
+                    postSubmitBehaviour(tagName);
+                    postTag(newTag);
+                }
+            });
             return rootView;
+        }
+
+        public class TagAdapter extends ArrayAdapter<Tag>{
+            public TagAdapter(ArrayList<Tag> tags){
+                super(getActivity(),0,tags);
+            }
+
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent){
+                if(convertView == null){
+                    convertView = getActivity().getLayoutInflater().inflate(R.layout.button_template, null);
+                }
+
+                Tag tag = getItem(position);
+                Button btn = (Button)convertView.findViewById(R.id.tag_button);
+                btn.setTag(tag.getId());
+                btn.setText(tag.getName());
+                btn.setOnLongClickListener(new View.OnLongClickListener() {
+                    @Override
+                    public boolean onLongClick(View v) {
+                        Button tagBtn = (Button) v.findViewById(R.id.tag_button);
+                        final String btnId = (String) tagBtn.getTag();
+//                        Toast.makeText(getActivity().getApplicationContext(),
+//                                "The button id is: "+btnId, Toast.LENGTH_SHORT).show();
+                        AlertDialog.Builder dialog = new AlertDialog.Builder(getActivity());
+//                        dialog.setTitle("Confirm delete Tag");
+                        dialog.setMessage("Are you sure you want to delete this tag?");
+                        dialog.setPositiveButton("Yes",
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        Log.d(TAG,"Yes clicked");
+                                        deleteTag(btnId);
+                                        dialog.dismiss();
+                                    }
+                                });
+                        dialog.setNegativeButton("No",
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        Log.d(TAG,"No clicked");
+                                        dialog.dismiss();
+                                    }
+                                });
+                        dialog.show();
+                        return true;
+                    }
+                });
+                return convertView;
+            }
+        }
+
+        public void postSubmitBehaviour(EditText view){
+            view.setText("");
+            InputMethodManager imm = (InputMethodManager)getActivity().getSystemService(
+                    Context.INPUT_METHOD_SERVICE);
+            imm.hideSoftInputFromWindow(tagName.getWindowToken(), 0);
+        }
+
+
+        public void postTag(String newTag){
+            AsyncHttpClient client = new AsyncHttpClient();
+            RequestParams params = new RequestParams();
+            params.put("poi", poi_id);
+            params.put("tag", newTag);
+            client.post("http://g53ids-env.elasticbeanstalk.com/insertNewTag.php", params, new AsyncHttpResponseHandler(){
+                @Override
+                public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+                    String response = new String(responseBody);
+                    if(response.equals("true")) {
+                        Toast.makeText(getActivity(), "Tag added!", Toast.LENGTH_LONG).show();
+                    }
+                    else{
+                        Toast.makeText(getActivity(), "Tag add failed!", Toast.LENGTH_LONG).show();
+                    }
+                    Log.d(TAG, "Tag added successfully");
+
+                }
+
+                @Override
+                public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                    failureAction(statusCode);
+                    Log.d(TAG, "Failed to add tag");
+                }
+            });
+        }
+
+        public void deleteTag(String tagId){
+            AsyncHttpClient client = new AsyncHttpClient();
+            RequestParams params = new RequestParams();
+            params.put("id", tagId);
+            client.post("http://g53ids-env.elasticbeanstalk.com/deleteTag.php", params, new AsyncHttpResponseHandler(){
+                @Override
+                public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+                    String response = new String(responseBody);
+                    if(response.equals("true")) {
+                        Toast.makeText(getActivity(), "Tag deleted!", Toast.LENGTH_LONG).show();
+                    }
+                    else{
+                        Toast.makeText(getActivity(), "Failed to delete!", Toast.LENGTH_LONG).show();
+                    }
+                }
+
+                @Override
+                public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                    failureAction(statusCode);
+                    Log.d(TAG, "Failed to delete tag");
+                }
+            });
+        }
+
+        public void failureAction(int statusCode){
+            if (statusCode == 404) {
+                Toast.makeText(getActivity(), "Requested resource not found", Toast.LENGTH_LONG).show();
+            } else if (statusCode == 500) {
+                Toast.makeText(getActivity(), "Something went wrong at server end", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(getActivity(), "Unexpected Error occurred! [Most common Error: Device might not be connected to Internet]",
+                        Toast.LENGTH_LONG).show();
+            }
         }
     }
 
@@ -273,10 +452,11 @@ public class DetailsActivity extends ActionBarActivity {
         private static final String ARG_SECTION_NUMBER = "section_number";
         private static final String ARG_POI_ID = "poi_id";
         private String poi_id;
-        private ArrayList<Comment> mComments;
+        private ArrayList<Comment> mComments = new ArrayList<>();
         private ProgressDialog syncDialog;
         private SwipeRefreshLayout swipeView;
         private CommentAdapter adapter;
+        private EditText commentText;
         /**
          * Returns a new instance of this fragment for the given section
          * number.
@@ -298,7 +478,7 @@ public class DetailsActivity extends ActionBarActivity {
             super.onCreate(savedInstance);
             Log.d(TAG, "Create is called");
             initSyncDialog();
-            mComments = new ArrayList<>();
+//            mComments = new ArrayList<>();
             Bundle bundle = getArguments();
             poi_id = bundle.getString(ARG_POI_ID);
 //            retrieveComments(bundle.getString(ARG_POI_ID));
@@ -322,6 +502,7 @@ public class DetailsActivity extends ActionBarActivity {
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                                  Bundle savedInstanceState) {
             View rootView = inflater.inflate(R.layout.fragment_comment, container, false);
+            commentText = (EditText)rootView.findViewById(R.id.comment_text);
             swipeView = (SwipeRefreshLayout)rootView.findViewById(R.id.swipe);
             swipeView.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
                 @Override
@@ -338,16 +519,19 @@ public class DetailsActivity extends ActionBarActivity {
                     retrieveComments(poi_id);
                 }
             });
-            final EditText text = (EditText)rootView.findViewById(R.id.comment_text);
             Button submit = (Button)rootView.findViewById(R.id.submit);
             submit.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    String commentText = text.getText().toString();
-                    Log.d(TAG, commentText);
-                    postComment(commentText);
+                    String text = commentText.getText().toString();
+                    Log.d(TAG, text);
+                    postSubmitBehaviour(commentText);
+                    postComment(text);
                 }
             });
+            if(mComments.isEmpty()) {
+                retrieveComments(poi_id);
+            }
             return rootView;
         }
 
@@ -375,6 +559,13 @@ public class DetailsActivity extends ActionBarActivity {
                 text.setText(comment.getText());
                 return convertView;
             }
+        }
+
+        public void postSubmitBehaviour(EditText view){
+            view.setText("");
+            InputMethodManager imm = (InputMethodManager)getActivity().getSystemService(
+                    Context.INPUT_METHOD_SERVICE);
+            imm.hideSoftInputFromWindow(commentText.getWindowToken(), 0);
         }
 
         private void retrieveComments(String id){

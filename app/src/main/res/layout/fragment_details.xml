@@ -17,20 +17,31 @@
         android:layout_height="wrap_content"
         android:layout_margin="15dp"
         android:text="Name"
-        android:textSize="20dp"/>
+        android:textSize="16dp"/>
+     <View
+         android:layout_width="match_parent"
+         android:layout_height="1dp"
+         android:background="@android:color/darker_gray" />
     <TextView android:id="@+id/type_of_poi"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="15dp"
         android:text="Type"
-        android:textSize="16dp" />
+        android:textSize="14dp" />
+     <View
+         android:layout_width="match_parent"
+         android:layout_height="1dp"
+         android:background="@android:color/darker_gray" />
     <TextView android:id="@+id/contact_of_poi"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="15dp"
         android:text="Contact"
-        android:textSize="16dp"/>
-
+        android:textSize="14dp"/>
+     <View
+         android:layout_width="match_parent"
+         android:layout_height="1dp"
+         android:background="@android:color/darker_gray" />
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -40,17 +51,20 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:text="Opens at:"
-            android:textSize="16dp"
+            android:textSize="14dp"
             android:id="@+id/open_time" />
         <TextView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:text="Closes at:"
-            android:textSize="16dp"
+            android:textSize="14dp"
             android:id="@+id/close_time" />
     </LinearLayout>
-
+     <View
+         android:layout_width="match_parent"
+         android:layout_height="1dp"
+         android:background="@android:color/darker_gray" />
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

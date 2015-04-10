@@ -1,5 +1,7 @@
 package com.keith.android.g53ids;
 
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -7,6 +9,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Path;
 import android.graphics.drawable.Drawable;
+import android.location.Location;
 import android.os.AsyncTask;
 import android.os.Environment;
 import android.support.v7.app.ActionBarActivity;
@@ -27,8 +30,9 @@ import com.graphhopper.GraphHopper;
 import com.graphhopper.util.PointList;
 import com.graphhopper.util.StopWatch;
 import com.keith.android.g53ids.database.DBHelper;
+import com.keith.android.g53ids.gps.FallBackLocationTracker;
 import com.keith.android.g53ids.gps.GPSTracker;
-import com.keith.android.g53ids.gps.LocationReceiver;
+//import com.keith.android.g53ids.gps.LocationReceiver;
 import com.loopj.android.http.AsyncHttpClient;
 import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.RequestParams;
@@ -52,12 +56,15 @@ import org.mapsforge.map.layer.Layer;
 import org.mapsforge.map.layer.Layers;
 import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.overlay.Circle;
+import org.mapsforge.map.layer.overlay.FixedPixelCircle;
 import org.mapsforge.map.layer.overlay.Marker;
 import org.mapsforge.map.layer.overlay.Polyline;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.rendertheme.InternalRenderTheme;
 
 import java.io.File;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.List;
 
 
@@ -75,8 +82,12 @@ public class MainActivity extends ActionBarActivity{
     private GraphHopper hopper;
     private File mapsFolder = new File(Environment.getExternalStorageDirectory(),"malaysia_singapore_brunei-gh");
     private BroadcastReceiver broadcastReceiver = new LocationReceiver();
-    private GPSTracker gps;
+//    private GPSTracker gps;
+    private FallBackLocationTracker tracker;
 
+    private BroadcastReceiver listenerReceiver;
+    private AlarmManager am;
+    private PendingIntent pi;
     //Activity Life cycle - Start
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -96,6 +107,7 @@ public class MainActivity extends ActionBarActivity{
     protected void onStart(){
         super.onStart();
         initBroadcastReceiver();
+        initListenerReceiver();
 //        showCurrentLocation(getInitialPosition());
     }
 
@@ -103,13 +115,15 @@ public class MainActivity extends ActionBarActivity{
     protected void onStop(){
         super.onStop();
         deInitBroadcastReceiver();
+        deInitListenerReceiver();
         AndroidResourceBitmap.clearResourceBitmaps();
     }
 
     @Override
     public void onDestroy(){
         super.onDestroy();
-        gps.stopUsingGPS();
+        tracker.stop();
+//        gps.stopUsingGPS();
 //        deInitBroadcastReceiver();
         destroyLayers();
         this.tileCache.destroy();
@@ -167,7 +181,9 @@ public class MainActivity extends ActionBarActivity{
     }
 
     public void initGPS(){
-        gps = new GPSTracker(MainActivity.this);
+//        gps = new GPSTracker(MainActivity.this);
+        tracker = new FallBackLocationTracker(MainActivity.this);
+        tracker.start();
     }
 
     public void initMapView(){
@@ -313,15 +329,31 @@ public class MainActivity extends ActionBarActivity{
     }
 
     private LatLong getInitialPosition(){
-        if(gps.canGetLocation()){
-            return new LatLong(gps.getLatitude(),gps.getLongitude());
+//        if(gps.canGetLocation()){
+//            return new LatLong(gps.getLatitude(),gps.getLongitude());
+//        }
+        if(tracker.hasLocation() && tracker.getLocation() != null){
+            Location currentLocation = tracker.getLocation();
+            return new LatLong(currentLocation.getLatitude(),currentLocation.getLongitude());
+        }
+        else if(tracker.hasPossiblyStaleLocation() && tracker.getPossiblyStaleLocation()!= null){
+            Location currentLocation = tracker.getPossiblyStaleLocation();
+            return new LatLong(currentLocation.getLatitude(),currentLocation.getLongitude());
         }
         else
             return new LatLong(2.943332,101.875841);
     }
 
+//    private void showCurrentLocation(LatLong coordinates){
+//        Circle circle = new Circle(coordinates, 20, Utils.createPaint(
+//                AndroidGraphicFactory.INSTANCE.createColor(Color.GREEN), 0,
+//                Style.FILL), null);
+//        this.mapView.getModel().mapViewPosition.setCenter(coordinates);
+//        this.mapView.getLayerManager().getLayers().add(circle);
+//    }
+
     private void showCurrentLocation(LatLong coordinates){
-        Circle circle = new Circle(coordinates, 20, Utils.createPaint(
+        FixedPixelCircle circle = new FixedPixelCircle(coordinates, 18, Utils.createPaint(
                 AndroidGraphicFactory.INSTANCE.createColor(Color.GREEN), 0,
                 Style.FILL), null);
         this.mapView.getModel().mapViewPosition.setCenter(coordinates);
@@ -329,10 +361,15 @@ public class MainActivity extends ActionBarActivity{
     }
 
     private void updateLocation(LatLong coordinates){
-        Circle circle = (Circle) mapView.getLayerManager().getLayers().get(1);
+        FixedPixelCircle circle = (FixedPixelCircle) mapView.getLayerManager().getLayers().get(1);
         circle.setLatLong(coordinates);
         circle.requestRedraw();
     }
+//    private void updateLocation(LatLong coordinates){
+//        Circle circle = (Circle) mapView.getLayerManager().getLayers().get(1);
+//        circle.setLatLong(coordinates);
+//        circle.requestRedraw();
+//    }
 
     public void displayMarker(String id,LatLong coordinates){
         PoiMarker marker = createTappableMarker(this,R.drawable.marker_red, coordinates, id);
@@ -382,6 +419,31 @@ public class MainActivity extends ActionBarActivity{
         });
     }
 
+    public void initListenerReceiver(){
+        am = (AlarmManager)(this.getSystemService(Context.ALARM_SERVICE));
+        IntentFilter filter = new IntentFilter("LOCATIONLISTENER");
+        listenerReceiver = new ListenerReceiver();
+        registerReceiver(listenerReceiver,filter);
+        pi = PendingIntent.getBroadcast(this,0,new Intent("LOCATIONLISTENER"),0);
+        startAlarm();
+    }
+
+    public void startAlarm(){
+        am.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis(), 30000,pi);
+    }
+
+    public void deInitListenerReceiver(){
+        am.cancel(pi);
+        unregisterReceiver(this.listenerReceiver);
+    }
+
+    public class ListenerReceiver extends BroadcastReceiver{
+        @Override
+        public void onReceive(Context c, Intent i){
+            Log.d(TAG,"Received broadcast from listenerReceiver");
+        }
+    }
+
     public void initBroadcastReceiver(){
         IntentFilter filter = new IntentFilter("LOCATIONCHANGED");
         this.registerReceiver(broadcastReceiver,filter);
@@ -391,8 +453,16 @@ public class MainActivity extends ActionBarActivity{
         this.unregisterReceiver(this.broadcastReceiver);
     }
 
+//    public LatLong getCurrentPosition(){
+//        Circle circle = (Circle)mapView.getLayerManager().getLayers().get(1);
+//        if(circle != null)
+//            return circle.getPosition();
+//        else
+//            return new LatLong(2.943332,101.875841);
+//    }
+
     public LatLong getCurrentPosition(){
-        Circle circle = (Circle)mapView.getLayerManager().getLayers().get(1);
+        FixedPixelCircle circle = (FixedPixelCircle)mapView.getLayerManager().getLayers().get(1);
         if(circle != null)
             return circle.getPosition();
         else
@@ -426,6 +496,7 @@ public class MainActivity extends ActionBarActivity{
             LatLong coordinates = new LatLong(intent.getDoubleExtra("latitude", 0), intent.getDoubleExtra("longitude",0));
             Log.d(TAG,"Latitude:"+ coordinates.latitude + " Longitude:"+ coordinates.longitude);
             updateLocation(coordinates);
+            UserLocation.getInstance().setLocation(coordinates);
         }
     }
 
@@ -437,7 +508,7 @@ public class MainActivity extends ActionBarActivity{
 
     public void syncRemoteDatabase(){
         AsyncHttpClient client = new AsyncHttpClient();
-        RequestParams params = new RequestParams();
+        final RequestParams params = new RequestParams();
         String date = DBHelper.getInstance(this).getLastSyncDate();
         if( date == null){
             Log.d(TAG, "Date is null");
@@ -451,9 +522,10 @@ public class MainActivity extends ActionBarActivity{
             @Override
             public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
 //                Log.d(TAG,new String(responseBody));
-                getSyncDatetime();
                 saveNewData(new String(responseBody));
-                progressDialog.dismiss();
+                getSyncDatetime();
+                syncTagTable(params);
+//                progressDialog.dismiss();
             }
 
             @Override
@@ -493,8 +565,9 @@ public class MainActivity extends ActionBarActivity{
                                     )
                             );
                     DBHelper.getInstance(this).insertPOI(p);
-                    Toast.makeText(this,"This point was reached", Toast.LENGTH_LONG).show();
+
                 }
+                Toast.makeText(this,"Poi table updated", Toast.LENGTH_LONG).show();
             }
 
         }catch(JSONException e){
@@ -534,5 +607,46 @@ public class MainActivity extends ActionBarActivity{
         }
     }
 
+    public void syncTagTable(RequestParams params){
+        AsyncHttpClient client = new AsyncHttpClient();
+//        RequestParams params = new RequestParams();
+//        params.put("date",date);
+        client.post("http://g53ids-env.elasticbeanstalk.com/syncTagDatabase.php", params, new AsyncHttpResponseHandler(){
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+                Log.d(TAG, new String(responseBody));
+                updateTagTable(new String(responseBody));
+                progressDialog.dismiss();
+            }
 
+            @Override
+            public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                failureAction(statusCode);
+                Log.d(TAG, "Failure in syncing tag");
+                progressDialog.dismiss();
+            }
+        });
+    }
+
+    public void updateTagTable(String responseBody){
+        try{
+            JSONArray arr = new JSONArray(responseBody);
+            if(arr.length() != 0){
+                for(int i=0; i<arr.length();i++){
+                    JSONObject object = (JSONObject)arr.get(i);
+                    Tag t = new Tag(
+                            object.get("Id").toString(),
+                            object.get("Name").toString(),
+                            object.get("Poi").toString(),
+                            Integer.parseInt(object.get("Flag").toString())
+                    );
+                    DBHelper.getInstance(this).insertTag(t);
+                }
+            Toast.makeText(this,"Tag table updated", Toast.LENGTH_LONG).show();
+            }
+
+        }catch(JSONException e){
+            e.printStackTrace();
+        }
+    }
 }
