@@ -1,13 +1,17 @@
 package com.keith.android.g53ids;
 
 import android.app.AlarmManager;
+import android.app.AlertDialog;
+import android.app.Dialog;
 import android.app.PendingIntent;
 import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Path;
+import android.graphics.PointF;
 import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.os.AsyncTask;
@@ -15,13 +19,20 @@ import android.os.Environment;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.support.v7.widget.PopupMenu;
+import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageButton;
+import android.widget.SeekBar;
+import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.graphhopper.GHRequest;
@@ -61,14 +72,16 @@ import org.mapsforge.map.layer.overlay.Marker;
 import org.mapsforge.map.layer.overlay.Polyline;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.rendertheme.InternalRenderTheme;
+import org.w3c.dom.Text;
 
 import java.io.File;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.util.ArrayList;
 import java.util.List;
 
 
-public class MainActivity extends ActionBarActivity{
+public class MainActivity extends ActionBarActivity implements AdapterView.OnItemSelectedListener{
     public final static String POI_ID = "poiId";
     private static final String MAPFILE = "malaysia_singapore_brunei.map";
     private static final String TAG = "MainActivity";
@@ -84,7 +97,7 @@ public class MainActivity extends ActionBarActivity{
     private BroadcastReceiver broadcastReceiver = new LocationReceiver();
 //    private GPSTracker gps;
     private FallBackLocationTracker tracker;
-
+    private boolean isAvailable = false; // Remember to this on again for location prompt!!!!
     private BroadcastReceiver listenerReceiver;
     private AlarmManager am;
     private PendingIntent pi;
@@ -160,6 +173,10 @@ public class MainActivity extends ActionBarActivity{
         else if(id == R.id.search_action){
             Intent intent = new Intent(this,SearchActivity.class);
             startActivityForResult(intent, SEARCH_REQUEST);
+            return true;
+        }
+        else if(id == R.id.nearby_action){
+            setupNearbyDialog();
             return true;
         }
         else if(id == R.id.add_action){
@@ -429,7 +446,7 @@ public class MainActivity extends ActionBarActivity{
     }
 
     public void startAlarm(){
-        am.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis(), 30000,pi);
+        am.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis(), 25000,pi);
     }
 
     public void deInitListenerReceiver(){
@@ -440,7 +457,13 @@ public class MainActivity extends ActionBarActivity{
     public class ListenerReceiver extends BroadcastReceiver{
         @Override
         public void onReceive(Context c, Intent i){
-            Log.d(TAG,"Received broadcast from listenerReceiver");
+            if(ConnectivityState.getInstance(getApplicationContext()).isInternetAvailable() && isAvailable ){
+                isAvailable = false;
+                Log.d(TAG,"Suggestion will take place");
+                LatLong loc = UserLocation.getInstance().getLocation();
+                Log.d(TAG, "Latitude sent: "+ loc.latitude +"Longitude sent: " + loc.longitude);
+                getPendingPoi(loc.latitude,loc.longitude);
+            }
         }
     }
 
@@ -543,28 +566,10 @@ public class MainActivity extends ActionBarActivity{
             if(arr.length() != 0){
                 for(int i=0; i<arr.length();i++){
                     JSONObject object = (JSONObject)arr.get(i);
-                    POI p = new POI(
-                            object.get("Id").toString(),
-                            object.get("Name").toString(),
-                            object.get("Type").toString(),
-                            Double.parseDouble(object.get("Rating").toString()),
-                            object.get("Contact").toString(),
-                            object.get("OpenTime").toString(),
-                            object.get("CloseTime").toString(),
-                            Integer.parseInt(object.get("Monday").toString()),
-                            Integer.parseInt(object.get("Tuesday").toString()),
-                            Integer.parseInt(object.get("Wednesday").toString()),
-                            Integer.parseInt(object.get("Thursday").toString()),
-                            Integer.parseInt(object.get("Friday").toString()),
-                            Integer.parseInt(object.get("Saturday").toString()),
-                            Integer.parseInt(object.get("Sunday").toString()),
-                            Integer.parseInt(object.get("Status").toString()),
-                            new LatLong(
-                                    Double.parseDouble(object.get("Latitude").toString()),
-                                    Double.parseDouble(object.get("Longitude").toString())
-                                    )
-                            );
-                    DBHelper.getInstance(this).insertPOI(p);
+                    POI p = JsonToPoi(object);
+                    if(p != null) {
+                        DBHelper.getInstance(this).insertPOI(p);
+                    }
 
                 }
                 Toast.makeText(this,"Poi table updated", Toast.LENGTH_LONG).show();
@@ -572,6 +577,35 @@ public class MainActivity extends ActionBarActivity{
 
         }catch(JSONException e){
             e.printStackTrace();
+        }
+    }
+
+    public POI JsonToPoi(JSONObject object){
+        try {
+            return new POI(
+                    object.get("Id").toString(),
+                    object.get("Name").toString(),
+                    object.get("Type").toString(),
+                    Double.parseDouble(object.get("Rating").toString()),
+                    object.get("Contact").toString(),
+                    object.get("OpenTime").toString(),
+                    object.get("CloseTime").toString(),
+                    Integer.parseInt(object.get("Monday").toString()),
+                    Integer.parseInt(object.get("Tuesday").toString()),
+                    Integer.parseInt(object.get("Wednesday").toString()),
+                    Integer.parseInt(object.get("Thursday").toString()),
+                    Integer.parseInt(object.get("Friday").toString()),
+                    Integer.parseInt(object.get("Saturday").toString()),
+                    Integer.parseInt(object.get("Sunday").toString()),
+                    Integer.parseInt(object.get("Status").toString()),
+                    new LatLong(
+                            Double.parseDouble(object.get("Latitude").toString()),
+                            Double.parseDouble(object.get("Longitude").toString())
+                    )
+            );
+        }catch(JSONException e){
+            e.printStackTrace();
+            return null;
         }
     }
 
@@ -648,5 +682,253 @@ public class MainActivity extends ActionBarActivity{
         }catch(JSONException e){
             e.printStackTrace();
         }
+    }
+
+    public void getPendingPoi(double lat, double lon){
+        AsyncHttpClient client = new AsyncHttpClient();
+        final RequestParams params = new RequestParams();
+        params.put("lat", String.valueOf(lat));
+        params.put("lon", String.valueOf(lon));
+        client.post("http://g53ids-env.elasticbeanstalk.com/retrievePendingLocations.php", params, new AsyncHttpResponseHandler(){
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+                String response = new String (responseBody);
+                Log.d(TAG, response);
+//                Toast.makeText(MainActivity.this,response,Toast.LENGTH_LONG).show();
+                processNearbyPoi(response);
+            }
+
+            @Override
+            public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                failureAction(statusCode);
+                isAvailable = true;
+                Log.d(TAG, "Failure in getting data");
+            }
+        });
+    }
+
+    public void processNearbyPoi(String data){
+        try {
+            JSONArray arr = new JSONArray(data);
+            if (arr.length() != 0) {
+                JSONObject object = (JSONObject) arr.get(0);
+                POI p = JsonToPoi(object);
+                showSuggestionBox(p);
+            }
+            else{
+                isAvailable = true;
+            }
+        }
+        catch (JSONException e){
+            isAvailable = true;
+            e.printStackTrace();
+        }
+
+    }
+
+    public void showSuggestionBox(POI p){
+        AlertDialog.Builder suggestDialog = new AlertDialog.Builder(MainActivity.this);
+        suggestDialog.setTitle("Can you confirm this POI exist?");
+        final String id = p.getId();
+        String name = p.getName() + "\n";
+        String type = p.getType() + "\n";
+        String contact = p.getContact() + "\n";
+        String openHour = p.getOpenTime() + "\n";
+        String closeHour = p.getCloseTime() + "\n";
+        suggestDialog.setMessage(name + type + contact + openHour + closeHour);
+        suggestDialog.setPositiveButton("Yes",
+                new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        Log.d(TAG, "Yes clicked");
+                        confirmPoi(id);
+                        dialog.dismiss();
+                    }
+                });
+        suggestDialog.setNeutralButton("Ignore",
+                new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        isAvailable = true;
+                        dialog.dismiss();
+                    }
+                });
+        suggestDialog.setNegativeButton("No",
+                new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dismissPoi(id);
+                        dialog.dismiss();
+                    }
+                });
+        suggestDialog.show();
+    }
+
+    public void confirmPoi(String id){
+        AsyncHttpClient client = new AsyncHttpClient();
+        final RequestParams params = new RequestParams();
+        params.put("id", id);
+        client.post("http://g53ids-env.elasticbeanstalk.com/supportPoiAddition.php", params, new AsyncHttpResponseHandler(){
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+                if(new String(responseBody).equals("true")) {
+                    Toast.makeText(MainActivity.this, "Contribution recorded", Toast.LENGTH_SHORT).show();
+                }
+                else{
+                    Toast.makeText(MainActivity.this, "Abnormal behaviour", Toast.LENGTH_SHORT).show();
+                }
+                isAvailable = true;
+            }
+
+            @Override
+            public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                failureAction(statusCode);
+                isAvailable = true;
+                Log.d(TAG, "Failure in getting data");
+            }
+        });
+    }
+
+    public void dismissPoi(String id){
+        AsyncHttpClient client = new AsyncHttpClient();
+        final RequestParams params = new RequestParams();
+        params.put("id", id);
+        client.post("http://g53ids-env.elasticbeanstalk.com/rejectPoiAddition.php", params, new AsyncHttpResponseHandler(){
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+                if(new String(responseBody).equals("true")) {
+                    Toast.makeText(MainActivity.this, "Contribution recorded", Toast.LENGTH_SHORT).show();
+                }
+                else{
+                    Toast.makeText(MainActivity.this, "Abnormal behaviour", Toast.LENGTH_SHORT).show();
+                }
+                isAvailable = true;
+            }
+
+            @Override
+            public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                failureAction(statusCode);
+                isAvailable = true;
+                Log.d(TAG, "Failure in getting data");
+            }
+        });
+    }
+
+    public void setupNearbyDialog(){
+        AlertDialog.Builder nearbyDialog = new AlertDialog.Builder(MainActivity.this);
+        nearbyDialog.setTitle("Locate nearby POI");
+        LayoutInflater inflater = (LayoutInflater)getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+        View layout = inflater.inflate(R.layout.dialog_nearby, null);
+        final SeekBar distance = (SeekBar)layout.findViewById(R.id.box_distance);
+        distance.setMax(10);
+        distance.setProgress(5);
+        final TextView distanceMessage = (TextView)layout.findViewById(R.id.selected_distance);
+        distanceMessage.setText("Distance: "+ distance.getProgress() +" km");
+        distance.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                distanceMessage.setText("Distance: "+progress +" km");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+
+            }
+        });
+        final Spinner shopType = (Spinner)layout.findViewById(R.id.nearby_type);
+        shopType.setOnItemSelectedListener(MainActivity.this);
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
+        R.array.grouping_array, android.R.layout.simple_spinner_item);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        shopType.setAdapter(adapter);
+        nearbyDialog.setPositiveButton("Locate",
+                new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        LatLong loc = UserLocation.getInstance().getLocation();
+                        getNearPoi(shopType.getSelectedItem().toString(),
+                                ((double)distance.getProgress())*1000,
+                                loc.latitude,loc.longitude);
+                        dialog.dismiss();
+                    }
+                });
+        nearbyDialog.setNegativeButton("Cancel",
+                new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                    }
+                });
+        nearbyDialog.setView(layout);
+        nearbyDialog.show();
+    }
+
+    public void onItemSelected(AdapterView<?> parent, View view,
+                               int pos, long id) {
+        // An item was selected. You can retrieve the selected item using
+        // parent.getItemAtPosition(pos)
+    }
+
+    public void onNothingSelected(AdapterView<?> parent) {
+        // Another interface callback
+    }
+
+    public void getNearPoi(String type, double radius, double lat,double lon){
+        LatLong loc = UserLocation.getInstance().getLocation();
+        PointF center = new PointF((float)loc.latitude, (float)loc.longitude);
+        final double mult = 1; // mult = 1.1; is more reliable
+        PointF p1 = calculateDerivedPosition(center, mult * radius, 0);
+        PointF p2 = calculateDerivedPosition(center, mult * radius, 90);
+        PointF p3 = calculateDerivedPosition(center, mult * radius, 180);
+        PointF p4 = calculateDerivedPosition(center, mult * radius, 270);
+
+        ArrayList<POI> results = DBHelper.getInstance(MainActivity.this).retrieveNearPoi(type,p1,p2,p3,p4);
+        if(results.size()!=0) {
+            removeAdditionalLayers();
+            for (POI x : results) {
+                displayMarker(x.getId(),x.getCoordinates());
+//                Log.d(TAG, x.toString());
+            }
+        }
+        else{
+            Log.d(TAG, "No results");
+        }
+    }
+
+    public PointF calculateDerivedPosition(PointF point,
+                                                  double range, double bearing)
+    {
+        double EarthRadius = 6371000; // m
+
+        double latA = Math.toRadians(point.x);
+        double lonA = Math.toRadians(point.y);
+        double angularDistance = range / EarthRadius;
+        double trueCourse = Math.toRadians(bearing);
+
+        double lat = Math.asin(
+                Math.sin(latA) * Math.cos(angularDistance) +
+                        Math.cos(latA) * Math.sin(angularDistance)
+                                * Math.cos(trueCourse));
+
+        double dlon = Math.atan2(
+                Math.sin(trueCourse) * Math.sin(angularDistance)
+                        * Math.cos(latA),
+                Math.cos(angularDistance) - Math.sin(latA) * Math.sin(lat));
+
+        double lon = ((lonA + dlon + Math.PI) % (Math.PI * 2)) - Math.PI;
+
+        lat = Math.toDegrees(lat);
+        lon = Math.toDegrees(lon);
+
+        PointF newPoint = new PointF((float)lat, (float)lon);
+
+        return newPoint;
+
     }
 }

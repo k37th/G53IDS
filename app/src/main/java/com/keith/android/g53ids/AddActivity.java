@@ -129,7 +129,7 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
                                int pos, long id) {
         // An item was selected. You can retrieve the selected item using
         // parent.getItemAtPosition(pos)
-        Log.d(TAG,"An item was selected");
+//        Log.d(TAG,"An item was selected");
     }
 
     public void onNothingSelected(AdapterView<?> parent) {
@@ -144,12 +144,17 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
                 EditText fieldEditText[] = {poiName,poiContact,poiOpenHour,poiCloseHour};
                 TextView fieldTextView[] = {poiLatitude,poiLongitude};
                 CheckBox fieldDays[] = {poiMondayOpen, poiTuesdayOpen, poiWednesdayOpen, poiThursdayOpen, poiFridayOpen, poiSaturdayOpen, poiSundayOpen};
-                if(!gotEmptyInputs(fieldEditText) && !gotEmptyInputs(fieldTextView)){
+//                if(!gotEmptyInputs(fieldEditText) && !gotEmptyInputs(fieldTextView) && oneDaySelected()){
 //                    getInputValues(fieldEditText);
 //                    getInputValues(fieldTextView);
 //                    getDaysValues(fieldDays);
 //                    Log.d(TAG, poiGroup.getSelectedItem().toString());
+//                    addNewPoi();
+//                }
+
+                if(checkCorrectFormat(fieldEditText) && oneDaySelected() && !gotEmptyInputs(fieldTextView)){
                     addNewPoi();
+                    Log.d(TAG, "Validation complete");
                 }
             }
         });
@@ -205,12 +210,21 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         return false;
     }
 
+    public boolean oneDaySelected(){
+        CheckBox [] dayList = {poiMondayOpen,poiTuesdayOpen,poiWednesdayOpen,
+                poiThursdayOpen,poiFridayOpen,poiSaturdayOpen,poiSundayOpen};
+        for(int i=0; i<dayList.length;i++){
+            if(dayList[i].isChecked()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean checkEmptyValue(EditText txt){
-        if(txt.getText().toString().length() == 0){
+        if(txt.getText().toString().trim().length() == 0){
             txt.setError("This field is empty");
             txt.requestFocus();
-//            InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
-//            imm.showSoftInput(txt,InputMethodManager.SHOW_IMPLICIT);
             return true;
         }
         else{
@@ -234,6 +248,11 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
             }
     }
 
+    public String getInputValue(EditText field){
+        return field.getText().toString().trim();
+    }
+
+
     public void getInputValues(TextView[] fields){
         for(int i=0; i < fields.length; i++){
             Log.d(TAG,"Value of field is "+ fields[i].getText().toString());
@@ -246,15 +265,70 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         }
     }
 
+    public boolean checkCorrectFormat(EditText[] fields){
+        String nameRegex = "^[A-Za-z0-9 ]{5,30}";
+        String contactRegex = "^\\d{2,3}[-,+]\\d{7,8}$";
+        String timeRegex = "^[012]\\d{1}:\\d{2}$";
+
+        for(int i=0; i<fields.length; i++){
+            if( i == 0) {
+                if (!getInputValue(fields[i]).matches(nameRegex)) {
+                    fields[i].setError("Incorrect format");
+                    return false;
+                } else {
+                    fields[i].setError(null);
+                    Log.d(TAG, "Name accepted");
+                }
+            }
+            else if(i == 1) {
+                if (!getInputValue(fields[i]).matches(contactRegex)) {
+                    fields[i].setError("Incorrect format");
+                    return false;
+                } else {
+                    fields[i].setError(null);
+                    Log.d(TAG, "Contact accepted");
+                }
+            }
+            else if(i == 2 || i == 3) {
+                if (!getInputValue(fields[i]).matches(timeRegex)) {
+                    fields[i].setError("Incorrect format");
+                    return false;
+                } else {
+                    fields[i].setError(null);
+                    Log.d(TAG, "Time accepted");
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public double getSimilarityPercentile(String newPoi, String existingPoi){
+        char[] arr1 = newPoi.toCharArray();
+        char[] arr2 = existingPoi.toCharArray();
+        int count = 0;
+        for(int i=0; i<arr1.length && i<arr2.length; i++){
+            if(arr1[i] == arr2[i]){
+                count++;
+            }
+        }
+        if(arr1.length > arr2.length){
+            return (count/arr1.length) * 100;
+        }
+        else{
+            return (count/arr2.length) * 100;
+        }
+    }
+
     public void addNewPoi(){
         AsyncHttpClient client = new AsyncHttpClient();
         RequestParams params = new RequestParams();
 
-        params.put("name", poiName.getText().toString());
-        params.put("type", poiGroup.getSelectedItem().toString());
-        params.put("contact", poiContact.getText().toString());
-        params.put("openTime", poiOpenHour.getText().toString() + ":00");
-        params.put("closeTime", poiCloseHour.getText().toString() + ":00");
+        params.put("name", poiName.getText().toString().trim());
+        params.put("type", poiGroup.getSelectedItem().toString().trim());
+        params.put("contact", poiContact.getText().toString().trim());
+        params.put("openTime", poiOpenHour.getText().toString().trim() + ":00");
+        params.put("closeTime", poiCloseHour.getText().toString().trim() + ":00");
         params.put("monday", ((poiMondayOpen.isChecked()) ? "1" : "0"));
         params.put("tuesday", ((poiTuesdayOpen.isChecked()) ? "1" : "0"));
         params.put("wednesday", ((poiWednesdayOpen.isChecked()) ? "1" : "0"));

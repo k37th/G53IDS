@@ -197,33 +197,23 @@ public class SearchActivity extends ActionBarActivity implements AdapterView.OnI
         // Another interface callback
     }
 
-    public void processQuery(String query){
-        ResultList.getInstance().clear();
-        ArrayList<POI>poiList = DBHelper.getInstance(this).getPois(query);
-        if(poiList.isEmpty()) {
-            ResultList.getInstance().add(new POI("0","No results found",new LatLong(0,0)));
-        }
-        else {
-            for (POI x : poiList) {
-                ResultList.getInstance().add(x);
-            }
-        }
-        adapter.notifyDataSetChanged();
-    }
-
     private class processSearch extends AsyncTask<String, Void, ArrayList<POI>>{
         protected ArrayList<POI> doInBackground(String... query){
             Log.d(TAG, "Doing in background");
             ResultList.getInstance().clear();
+            ArrayList<POI>poiList;
+            boolean availableNow = availabilitySpinner.getSelectedItem().toString().equals("Open Now");
             if(optionSearch.getCheckedRadioButtonId() == nameSearch.getId()){
                 Log.d(TAG, "Checked button is name ");
+                poiList = DBHelper.getInstance(SearchActivity.this).getPois(availableNow, query[0]);
+                return poiList;
             }
-            else if(optionSearch.getCheckedRadioButtonId() == tagSearch.getId()){
+            else{
                 Log.d(TAG, "Checked button is tag");
+                poiList = DBHelper.getInstance(SearchActivity.this).getTagRelatedPois(availableNow, query[0]);
             }
-            ArrayList<POI>poiList = DBHelper.getInstance(SearchActivity.this).getPois(query[0]);
+//            ArrayList<POI>poiList = DBHelper.getInstance(SearchActivity.this).getPois(query[0]);
             return poiList;
-
         }
 
         protected void onPostExecute(ArrayList<POI> list){

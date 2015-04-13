@@ -5,6 +5,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.graphics.PointF;
 
 import com.keith.android.g53ids.POI;
 import com.keith.android.g53ids.Tag;
@@ -12,6 +13,7 @@ import com.keith.android.g53ids.Tag;
 import org.mapsforge.core.model.LatLong;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 
 public class DBHelper extends SQLiteOpenHelper{
 
@@ -126,7 +128,7 @@ public class DBHelper extends SQLiteOpenHelper{
 
     public static final String CREATE_TAG_TABLE =
             "CREATE TABLE " + TAG_TABLE + "(" +
-                    TAG_ID + " TEXT NOT NULL," +
+                    TAG_ID + " TEXT PRIMARY KEY," +
                     TAG_NAME + " TEXT NOT NULL," +
                     TAG_POI + " TEXT NOT NULL," +
                     TAG_FLAG + " INTEGER NOT NULL" + ");";
@@ -181,11 +183,39 @@ public class DBHelper extends SQLiteOpenHelper{
             db.close();
         }
     }
-    public ArrayList<POI> getPois(String name){
-        String where = POI_NAME + " LIKE ?";
-        String[] whereArgs = new String[] {"%"+name+"%"};
+    public ArrayList<POI> getPois(boolean availableNow, String name){
+        String where = POI_STATUS + " = ?  AND " + POI_NAME + " LIKE ?";
+        if(availableNow){
+            where += includeAvailabilityQuery();
+        }
+        String[] whereArgs = new String[] {"2","%"+name+"%"};
+
         this.openReadableDB();
         Cursor cursor = db.query(POI_TABLE, null, where, whereArgs, null, null, null);
+        ArrayList<POI> pois = new ArrayList<POI>();
+        while(cursor.moveToNext()){
+            pois.add(getPoiFromCursor(cursor));
+        }
+        if(cursor != null)
+            cursor.close();
+        closeDB();
+        return pois;
+    }
+
+    public ArrayList<POI> getTagRelatedPois(boolean availableNow, String tag){
+
+        String query = "SELECT * FROM "+POI_TABLE + " WHERE " +POI_STATUS +" = ?" ;
+        if(availableNow){
+            query += includeAvailabilityQuery();
+        }
+        query += " AND " + POI_ID + " IN " +
+        "(SELECT DISTINCT "+ TAG_POI + " FROM " + TAG_TABLE + " WHERE "+ TAG_NAME +" LIKE ?)";
+
+        String[] whereArgs = new String[] {"2","%"+tag+"%"};
+
+        this.openReadableDB();
+        Cursor cursor = db.rawQuery(query,whereArgs);
+//        Cursor cursor = db.query(POI_TABLE, null, where, whereArgs, null, null, null);
         ArrayList<POI> pois = new ArrayList<POI>();
         while(cursor.moveToNext()){
             pois.add(getPoiFromCursor(cursor));
@@ -344,4 +374,61 @@ public class DBHelper extends SQLiteOpenHelper{
             }
         }
     }
+
+    public ArrayList<POI> retrieveNearPoi(String type, PointF p1, PointF p2, PointF p3, PointF p4){
+        String where = POI_STATUS + " = ? "
+                + POI_TYPE + " = ? AND "
+                + POI_LATITUDE + " > ? AND "
+                + POI_LATITUDE + " < ? AND "
+                + POI_LONGITUDE + " < ? AND "
+                + POI_LONGITUDE + " > ?";
+        String[] whereArgs = new String[] {"2", type,String.valueOf(p3.x),String.valueOf(p1.x),String.valueOf(p2.y),String.valueOf(p4.y)};
+
+        this.openReadableDB();
+        Cursor cursor = db.query(POI_TABLE, null, where, whereArgs, null, null, null);
+        ArrayList<POI> pois = new ArrayList<POI>();
+        while(cursor.moveToNext()){
+            pois.add(getPoiFromCursor(cursor));
+        }
+        if(cursor != null)
+            cursor.close();
+        closeDB();
+        return pois;
+    }
+
+    private String includeAvailabilityQuery(){
+        Calendar calendar = Calendar.getInstance();
+        return " AND "+ getDayColumn(getDay(calendar)) + " = 1 AND " +
+                "'"+ getTime(calendar) + "00:00'" + " BETWEEN " + POI_OPENHOUR + " AND " + POI_CLOSEHOUR;
+    }
+
+    private String getDayColumn(int d){
+        switch (d){
+            case 1:
+                return POI_SUNDAY;
+            case 2:
+                return POI_MONDAY;
+            case 3:
+                return POI_TUESDAY;
+            case 4:
+                return POI_WEDNESDAY;
+            case 5:
+                return POI_THURSDAY;
+            case 6:
+                return POI_FRIDAY;
+            case 7:
+                return POI_SATURDAY;
+            default:
+                return POI_SUNDAY;
+        }
+    }
+
+    private int getDay(Calendar calendar){
+        return calendar.get(Calendar.DAY_OF_WEEK); //Sunday starts with 1
+    }
+
+    private int getTime(Calendar calendar){
+        return calendar.get(Calendar.HOUR_OF_DAY); //10pm is 22
+    }
+
 }

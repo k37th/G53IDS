@@ -211,6 +211,31 @@ public class DetailsActivity extends ActionBarActivity {
             friday.setChecked(p.getFriday() == 1);
             saturday.setChecked(p.getSaturday() == 1);
             sunday.setChecked(p.getSunday() == 1);
+            Button report = (Button)rootView.findViewById(R.id.report);
+            report.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    AlertDialog.Builder dialog = new AlertDialog.Builder(getActivity());
+//                        dialog.setTitle("Confirm delete Tag");
+                    dialog.setMessage("Are you sure you want to report this POI?");
+                    dialog.setPositiveButton("Yes",
+                            new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    reportPoi(p.getId());
+                                    dialog.dismiss();
+                                }
+                            });
+                    dialog.setNegativeButton("No",
+                            new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    dialog.dismiss();
+                                }
+                            });
+                    dialog.show();
+                }
+            });
             Button submit = (Button)rootView.findViewById(R.id.navigate);
             submit.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -222,6 +247,40 @@ public class DetailsActivity extends ActionBarActivity {
                 }
             });
             return rootView;
+        }
+
+        public void reportPoi(String poiId){
+            AsyncHttpClient client = new AsyncHttpClient();
+            RequestParams params = new RequestParams();
+            params.put("id", poiId);
+            client.post("http://g53ids-env.elasticbeanstalk.com/reportExistingPoi.php", params, new AsyncHttpResponseHandler(){
+                @Override
+                public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+                    String response = new String(responseBody);
+                    if(response.equals("true")) {
+                        Toast.makeText(getActivity(), "Poi reported!", Toast.LENGTH_LONG).show();
+                    }
+                    else{
+                        Toast.makeText(getActivity(), "Something went wrong!", Toast.LENGTH_LONG).show();
+                    }
+                }
+
+                @Override
+                public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                    failureAction(statusCode);
+                }
+            });
+        }
+
+        public void failureAction(int statusCode){
+            if (statusCode == 404) {
+                Toast.makeText(getActivity(), "Requested resource not found", Toast.LENGTH_LONG).show();
+            } else if (statusCode == 500) {
+                Toast.makeText(getActivity(), "Something went wrong at server end", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(getActivity(), "Unexpected Error occurred! [Most common Error: Device might not be connected to Internet]",
+                        Toast.LENGTH_LONG).show();
+            }
         }
     }
 
@@ -271,35 +330,6 @@ public class DetailsActivity extends ActionBarActivity {
                 Log.d(TAG, x.displayTag());
             }
             View rootView = inflater.inflate(R.layout.fragment_tags, container, false);
-//            LinearLayout tagBoard = (LinearLayout)rootView.findViewById(R.id.tag_board);
-//            LinearLayout templateRow = (LinearLayout)inflater.inflate(R.layout.btn_row_template, null);
-//            LinearLayout.LayoutParams param = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-//                    ViewGroup.LayoutParams.MATCH_PARENT, 1.0f);
-
-//            ArrayList<LinearLayout> rows = new ArrayList<>();
-//            int j=0;
-//            for(int i=0; i<mTags.size(); i++){
-//            for(int i=0; i<5; i++){
-//                if(j==0){
-//                    rows.add((LinearLayout)inflater.inflate(R.layout.btn_row_template,null));
-//                    j++;
-//                }
-//                else if(i>0){
-//                    if( (i-1) % 3 == 0){
-//                        rows.add((LinearLayout)inflater.inflate(R.layout.btn_row_template,null));
-//                        j++;
-//                    }
-//                }
-//                Button btn = new Button(getActivity());
-//                btn.setLayoutParams(param);
-//                btn.setText(mTags.get(i).getName());
-//                btn.setText("Button "+ i);
-//                rows.get(j-1).addView(btn);
-//            }
-
-//            for (LinearLayout row : rows){
-//                tagBoard.addView(row);
-//            }
 
             GridView tagView = (GridView)rootView.findViewById(R.id.tagGrid);
             adapter = new TagAdapter(mTags);

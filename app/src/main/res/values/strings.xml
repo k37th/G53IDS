@@ -9,6 +9,7 @@
     <string name="action_done">Done</string>
     <string name="title_activity_search">Search</string>
     <string name="search">Search</string>
+    <string name="nearby">Nearby</string>
     <string name="search_title">Search</string>
     <string name="add">Add</string>
     <string name="search_hint">Look for POI</string>
