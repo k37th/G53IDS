@@ -342,7 +342,7 @@ public class DBHelper extends SQLiteOpenHelper{
     }
 
     public ArrayList<Tag> getTags(String poi){
-        String where = TAG_POI + " = ? AND " + TAG_FLAG + " = ?" ;
+        String where = TAG_POI + " = ? AND " + TAG_FLAG + " = ? ORDER BY "+ TAG_NAME;
         String[] whereArgs = new String[] {poi, "0"};
         this.openReadableDB();
         Cursor cursor = db.query(TAG_TABLE, null, where, whereArgs, null, null, null);
@@ -376,7 +376,7 @@ public class DBHelper extends SQLiteOpenHelper{
     }
 
     public ArrayList<POI> retrieveNearPoi(String type, PointF p1, PointF p2, PointF p3, PointF p4){
-        String where = POI_STATUS + " = ? "
+        String where = POI_STATUS + " = ? AND "
                 + POI_TYPE + " = ? AND "
                 + POI_LATITUDE + " > ? AND "
                 + POI_LATITUDE + " < ? AND "
@@ -398,8 +398,10 @@ public class DBHelper extends SQLiteOpenHelper{
 
     private String includeAvailabilityQuery(){
         Calendar calendar = Calendar.getInstance();
+        int time = getTime(calendar);
         return " AND "+ getDayColumn(getDay(calendar)) + " = 1 AND " +
-                "'"+ getTime(calendar) + "00:00'" + " BETWEEN " + POI_OPENHOUR + " AND " + POI_CLOSEHOUR;
+                "'"+ (time < 10 ? "0" + time : time)
+                + "00:00'" + " BETWEEN " + POI_OPENHOUR + " AND " + POI_CLOSEHOUR;
     }
 
     private String getDayColumn(int d){

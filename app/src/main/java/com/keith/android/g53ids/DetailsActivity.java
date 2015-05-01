@@ -38,6 +38,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.graphhopper.util.StopWatch;
 import com.keith.android.g53ids.database.DBHelper;
 import com.loopj.android.http.AsyncHttpClient;
 import com.loopj.android.http.AsyncHttpResponseHandler;
@@ -98,8 +99,8 @@ public class DetailsActivity extends ActionBarActivity {
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
 
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
+        if(id == android.R.id.home){
+            finish();
             return true;
         }
 
@@ -215,25 +216,32 @@ public class DetailsActivity extends ActionBarActivity {
             report.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    AlertDialog.Builder dialog = new AlertDialog.Builder(getActivity());
+                    if(ConnectivityState.getInstance(getActivity().getApplicationContext()).isInternetAvailable()) {
+                        AlertDialog.Builder dialog = new AlertDialog.Builder(getActivity());
 //                        dialog.setTitle("Confirm delete Tag");
-                    dialog.setMessage("Are you sure you want to report this POI?");
-                    dialog.setPositiveButton("Yes",
-                            new DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(DialogInterface dialog, int which) {
-                                    reportPoi(p.getId());
-                                    dialog.dismiss();
-                                }
-                            });
-                    dialog.setNegativeButton("No",
-                            new DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(DialogInterface dialog, int which) {
-                                    dialog.dismiss();
-                                }
-                            });
-                    dialog.show();
+                        dialog.setMessage("Are you sure you want to report this POI?");
+                        dialog.setPositiveButton("Yes",
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        reportPoi(p.getId());
+                                        dialog.dismiss();
+                                    }
+                                });
+                        dialog.setNegativeButton("No",
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        dialog.dismiss();
+                                    }
+                                });
+                        dialog.show();
+                    }
+                    else{
+                        Toast.makeText(getActivity().getApplicationContext(),
+                                "Internet connectivity required",
+                                Toast.LENGTH_LONG).show();
+                    }
                 }
             });
             Button submit = (Button)rootView.findViewById(R.id.navigate);
@@ -241,7 +249,10 @@ public class DetailsActivity extends ActionBarActivity {
                 @Override
                 public void onClick(View v) {
                     Intent intent = new Intent();
+                    LatLong loc = p.getCoordinates();
                     intent.putExtra("poiID", p.getId());
+                    intent.putExtra("poiLat", loc.latitude);
+                    intent.putExtra("poiLon", loc.longitude);
                     getActivity().setResult(Activity.RESULT_OK, intent);
                     getActivity().finish();
                 }
@@ -340,10 +351,19 @@ public class DetailsActivity extends ActionBarActivity {
             submit.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    String newTag = tagName.getText().toString();
-                    Log.d(TAG, newTag);
-                    postSubmitBehaviour(tagName);
-                    postTag(newTag);
+                    if(ConnectivityState.getInstance(getActivity().getApplicationContext()).isInternetAvailable()) {
+                        String newTag = tagName.getText().toString().trim();
+                        if(!emptyInput(newTag)) {
+                            Log.d(TAG, newTag);
+                            postSubmitBehaviour(tagName);
+                            postTag(newTag);
+                        }
+                    }
+                    else{
+                        Toast.makeText(getActivity().getApplicationContext(),
+                                "Internet connectivity required",
+                                Toast.LENGTH_LONG).show();
+                    }
                 }
             });
             return rootView;
@@ -531,21 +551,13 @@ public class DetailsActivity extends ActionBarActivity {
         @Override
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                                  Bundle savedInstanceState) {
+            Log.d(TAG, "OnCreateView called");
             View rootView = inflater.inflate(R.layout.fragment_comment, container, false);
             commentText = (EditText)rootView.findViewById(R.id.comment_text);
             swipeView = (SwipeRefreshLayout)rootView.findViewById(R.id.swipe);
             swipeView.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
                 @Override
                 public void onRefresh() {
-//                    swipeView.setRefreshing(true);
-//                    Toast.makeText(getActivity(),"Refresh started",Toast.LENGTH_SHORT).show();
-//                    (new Handler()).postDelayed(new Runnable() {
-//                        @Override
-//                        public void run() {
-//                            swipeView.setRefreshing(false);
-//                            Toast.makeText(getActivity(),"Refresh completed",Toast.LENGTH_SHORT).show();
-//                        }
-//                    }, 3000);
                     retrieveComments(poi_id);
                 }
             });
@@ -553,13 +565,22 @@ public class DetailsActivity extends ActionBarActivity {
             submit.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    String text = commentText.getText().toString();
-                    Log.d(TAG, text);
-                    postSubmitBehaviour(commentText);
-                    postComment(text);
+                    if(ConnectivityState.getInstance(getActivity().getApplicationContext()).isInternetAvailable()) {
+                        String text = commentText.getText().toString().trim();
+                        if(!emptyInput(text)){
+                            Log.d(TAG, text);
+                            postSubmitBehaviour(commentText);
+                            postComment(text);
+                        }
+                    }
+                    else{
+                        Toast.makeText(getActivity().getApplicationContext(),
+                                "Internet connectivity required",
+                                Toast.LENGTH_LONG).show();
+                    }
                 }
             });
-            if(mComments.isEmpty()) {
+            if(mComments.isEmpty()){
                 retrieveComments(poi_id);
             }
             return rootView;
@@ -599,31 +620,33 @@ public class DetailsActivity extends ActionBarActivity {
         }
 
         private void retrieveComments(String id){
-            AsyncHttpClient client = new AsyncHttpClient();
-            RequestParams params = new RequestParams();
-            params.put("id",id);
-//            syncDialog.show();
-            swipeView.setRefreshing(true);
-            client.post("http://g53ids-env.elasticbeanstalk.com/retrieveAllComments.php", params, new AsyncHttpResponseHandler(){
-                @Override
-                public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
-                    clearComments();
-                    processComments(new String(responseBody));
-                    Log.d(TAG, "Success in retrieving comments");
-                    adapter.notifyDataSetChanged();
-//                    syncDialog.dismiss();
-                    swipeView.setRefreshing(false);
-                }
+            if(ConnectivityState.getInstance(getActivity().getApplicationContext()).isInternetAvailable()) {
+                AsyncHttpClient client = new AsyncHttpClient();
+                RequestParams params = new RequestParams();
+                params.put("id", id);
+                swipeView.setRefreshing(true);
+                float time;
+                StopWatch sw = new StopWatch().start();
+                client.post("http://g53ids-env.elasticbeanstalk.com/retrieveAllComments.php", params, new AsyncHttpResponseHandler() {
+                    @Override
+                    public void onSuccess(int statusCode, Header[] headers, byte[] responseBody) {
+                        clearComments();
+                        processComments(new String(responseBody));
+                        Log.d(TAG, "Success in retrieving comments");
+                        adapter.notifyDataSetChanged();
+                        swipeView.setRefreshing(false);
+                    }
 
-                @Override
-                public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
-                    failureAction(statusCode);
-                    Log.d(TAG, "Failure in retrieving comments");
-//                    syncDialog.dismiss();
-                    swipeView.setRefreshing(false);
-                }
-            });
-
+                    @Override
+                    public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error) {
+                        failureAction(statusCode);
+                        Log.d(TAG, "Failure in retrieving comments");
+                        swipeView.setRefreshing(false);
+                    }
+                });
+                time = sw.stop().getSeconds();
+                Log.d(TAG, "Time take for comment retrieval: "+time);
+            }
         }
 
         public void failureAction(int statusCode){
@@ -683,5 +706,9 @@ public class DetailsActivity extends ActionBarActivity {
                 }
             });
         }
+    }
+
+    public static boolean emptyInput(String input){
+        return input.length()==0;
     }
 }

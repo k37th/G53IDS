@@ -1,9 +1,14 @@
 package com.keith.android.g53ids;
 
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -18,16 +23,21 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.graphhopper.util.StopWatch;
 import com.keith.android.g53ids.database.DBHelper;
 import com.loopj.android.http.AsyncHttpClient;
 import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.RequestParams;
 
 import org.apache.http.Header;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.mapsforge.core.model.LatLong;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.util.ArrayList;
 
 
 public class AddActivity extends ActionBarActivity implements AdapterView.OnItemSelectedListener{
@@ -47,6 +57,7 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
     private CheckBox poiSundayOpen;
     private TextView poiLatitude;
     private TextView poiLongitude;
+    private ProgressDialog progressDialog;
     NumberFormat formatter = new DecimalFormat("#0.00000000");
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,6 +65,7 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         setContentView(R.layout.activity_add);
         initView();
         initSpinner();
+        initProgressDialog();
         initUseCurrentCoordinatesButton();
         initSelectCoordinatesButton();
         initSubmitButton();
@@ -74,7 +86,30 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         poiSundayOpen = (CheckBox)findViewById(R.id.sunday);
         poiLatitude = (TextView)findViewById(R.id.poi_latitude);
         poiLongitude = (TextView)findViewById(R.id.poi_longitude);
+        addOnTextChangeListener();
+    }
 
+    private void addOnTextChangeListener(){
+        EditText array[] = {poiName,poiContact,poiOpenHour,poiCloseHour};
+        for(int i=0; i<array.length;i++){
+            final EditText field = array[i];
+            field.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    field.setError(null);
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+
+                }
+            });
+        }
     }
 
     public void initSpinner(){
@@ -101,12 +136,10 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
+        if(id == android.R.id.home){
+            finish();
             return true;
         }
-
         return super.onOptionsItemSelected(item);
     }
 
@@ -136,14 +169,21 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         // Another interface callback
     }
 
+    public void initProgressDialog(){
+        progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage("Adding new POI");
+        progressDialog.setCancelable(false);
+    }
+
     public void initSubmitButton(){
         Button submit = (Button)findViewById(R.id.submit);
         submit.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                EditText fieldEditText[] = {poiName,poiContact,poiOpenHour,poiCloseHour};
-                TextView fieldTextView[] = {poiLatitude,poiLongitude};
-                CheckBox fieldDays[] = {poiMondayOpen, poiTuesdayOpen, poiWednesdayOpen, poiThursdayOpen, poiFridayOpen, poiSaturdayOpen, poiSundayOpen};
+                if(ConnectivityState.getInstance(AddActivity.this.getApplicationContext()).isInternetAvailable()) {
+                    EditText fieldEditText[] = {poiName, poiContact, poiOpenHour, poiCloseHour};
+                    TextView fieldTextView[] = {poiLatitude, poiLongitude};
+                    CheckBox fieldDays[] = {poiMondayOpen, poiTuesdayOpen, poiWednesdayOpen, poiThursdayOpen, poiFridayOpen, poiSaturdayOpen, poiSundayOpen};
 //                if(!gotEmptyInputs(fieldEditText) && !gotEmptyInputs(fieldTextView) && oneDaySelected()){
 //                    getInputValues(fieldEditText);
 //                    getInputValues(fieldTextView);
@@ -152,9 +192,16 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
 //                    addNewPoi();
 //                }
 
-                if(checkCorrectFormat(fieldEditText) && oneDaySelected() && !gotEmptyInputs(fieldTextView)){
-                    addNewPoi();
-                    Log.d(TAG, "Validation complete");
+                    if (checkCorrectFormat(fieldEditText) && oneDaySelected() && !gotEmptyInputs(fieldTextView)) {
+//                    addNewPoi();
+                        Log.d(TAG, "Validation complete");
+                        getSimilarPoi();
+                    }
+                }
+                else{
+                    Toast.makeText(AddActivity.this.getApplicationContext(),
+                            "Internet connectivity required",
+                            Toast.LENGTH_LONG).show();
                 }
             }
         });
@@ -199,6 +246,18 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
             }
         }
         return false;
+    }
+
+    public void showAlertDialog(){
+        new AlertDialog.Builder(this)
+                .setTitle("Oops!")
+                .setMessage("There is a similar entry recorded in the database")
+                .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        // continue with delete
+                        dialog.dismiss();
+                    }
+                }).show();
     }
 
     public boolean gotEmptyInputs(TextView[] fields){
@@ -273,7 +332,7 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         for(int i=0; i<fields.length; i++){
             if( i == 0) {
                 if (!getInputValue(fields[i]).matches(nameRegex)) {
-                    fields[i].setError("Incorrect format");
+                    fields[i].setError("Incorrect format\nOnly accepts min 5 and max 25 characters");
                     return false;
                 } else {
                     fields[i].setError(null);
@@ -282,7 +341,7 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
             }
             else if(i == 1) {
                 if (!getInputValue(fields[i]).matches(contactRegex)) {
-                    fields[i].setError("Incorrect format");
+                    fields[i].setError("Incorrect format\nOnly accepts xxx-xxxxxxx");
                     return false;
                 } else {
                     fields[i].setError(null);
@@ -291,7 +350,7 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
             }
             else if(i == 2 || i == 3) {
                 if (!getInputValue(fields[i]).matches(timeRegex)) {
-                    fields[i].setError("Incorrect format");
+                    fields[i].setError("Incorrect format\nOnly accepts HH:MM");
                     return false;
                 } else {
                     fields[i].setError(null);
@@ -301,23 +360,6 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         }
 
         return true;
-    }
-
-    public double getSimilarityPercentile(String newPoi, String existingPoi){
-        char[] arr1 = newPoi.toCharArray();
-        char[] arr2 = existingPoi.toCharArray();
-        int count = 0;
-        for(int i=0; i<arr1.length && i<arr2.length; i++){
-            if(arr1[i] == arr2[i]){
-                count++;
-            }
-        }
-        if(arr1.length > arr2.length){
-            return (count/arr1.length) * 100;
-        }
-        else{
-            return (count/arr2.length) * 100;
-        }
     }
 
     public void addNewPoi(){
@@ -338,7 +380,8 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         params.put("sunday", ((poiSundayOpen.isChecked()) ? "1" : "0"));
         params.put("latitude", poiLatitude.getText().toString());
         params.put("longitude", poiLongitude.getText().toString());
-
+        float time;
+        StopWatch sw = new StopWatch().start();
         client.post("http://g53ids-env.elasticbeanstalk.com/insertNewPoi.php", params, new AsyncHttpResponseHandler(){
             @Override
             public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
@@ -351,10 +394,48 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
                     finish();
                 }
 //                Log.d(TAG, response);
+                progressDialog.dismiss();
             }
 
             @Override
             public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                failureAction(statusCode);
+                progressDialog.dismiss();
+            }
+        });
+        time = sw.stop().getSeconds();
+        Log.d(TAG, "Time take for adding poi: "+time);
+    }
+
+    public void getSimilarPoi(){
+        progressDialog.show();
+        AsyncHttpClient client = new AsyncHttpClient();
+        RequestParams params = new RequestParams();
+        final String newPoiName = poiName.getText().toString().trim();
+        params.put("type", poiGroup.getSelectedItem().toString().trim());
+        params.put("lat", poiLatitude.getText().toString());
+        params.put("lon", poiLongitude.getText().toString());
+
+        client.post("http://g53ids-env.elasticbeanstalk.com/retrieveSimilarLocations.php", params, new AsyncHttpResponseHandler(){
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
+                String response = new String(responseBody);
+                Log.d(TAG, response);
+                if(!processSimilarLocations(newPoiName,response)){
+                    Log.d(TAG, "Similar poi detected");
+                    progressDialog.dismiss();
+                    showAlertDialog();
+//                    Toast.makeText(getApplicationContext(),"There is a similar entry in the database", Toast.LENGTH_LONG).show();
+                }
+                else{
+                    Log.d(TAG, "New poi will be added");
+                    addNewPoi();
+                }
+            }
+
+            @Override
+            public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error){
+                progressDialog.dismiss();
                 failureAction(statusCode);
             }
         });
@@ -366,8 +447,83 @@ public class AddActivity extends ActionBarActivity implements AdapterView.OnItem
         } else if (statusCode == 500) {
             Toast.makeText(getApplicationContext(), "Something went wrong at server end", Toast.LENGTH_LONG).show();
         } else {
-            Toast.makeText(getApplicationContext(), "Unexpected Error occcured! [Most common Error: Device might not be connected to Internet]",
+            Toast.makeText(getApplicationContext(), "Unexpected Error occurred! [Most common Error: Device might not be connected to Internet]",
                     Toast.LENGTH_LONG).show();
         }
+    }
+
+    private boolean processSimilarLocations(String newName, String data){
+        try{
+            JSONArray arr = new JSONArray(data);
+            if(arr.length() != 0){
+                loop:
+                for(int i=0; i<arr.length();i++){
+                    JSONObject object = (JSONObject)arr.get(i);
+                    String name = object.get("Name").toString();
+                    if(isDuplicate(newName,name)){
+                        return false;
+                    }
+                }
+                return true;
+            }
+            else{
+                return true;
+            }
+
+        }catch(JSONException e){
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    private boolean isDuplicate(String newName, String name){
+        double similarityPercentile = compareStrings(newName, name);
+        Log.d(TAG, "New: "+newName +", Current: "+ name + " Similarity: "+ similarityPercentile);
+        return similarityPercentile > 70;
+    }
+
+    private String[] letterPairs(String str) {
+        int numPairs = str.length()-1;
+        String[] pairs = new String[numPairs];
+        for (int i=0; i<numPairs; i++) {
+            pairs[i] = str.substring(i,i+2);
+        }
+        return pairs;
+    }
+
+    /** @return an ArrayList of 2-character Strings. */
+    private ArrayList wordLetterPairs(String str) {
+        ArrayList allPairs = new ArrayList();
+        // Tokenize the string and put the tokens/words into an array
+        String[] words = str.split("\\s");
+        // For each word
+        for (int w=0; w < words.length; w++) {
+            // Find the pairs of characters
+            String[] pairsInWord = letterPairs(words[w]);
+            for (int p=0; p < pairsInWord.length; p++) {
+                allPairs.add(pairsInWord[p]);
+            }
+        }
+        return allPairs;
+    }
+
+    /** @return lexical similarity value in the range [0,1] */
+    public double compareStrings(String str1, String str2) {
+        ArrayList pairs1 = wordLetterPairs(str1.toUpperCase());
+        ArrayList pairs2 = wordLetterPairs(str2.toUpperCase());
+        int intersection = 0;
+        int union = pairs1.size() + pairs2.size();
+        for (int i=0; i<pairs1.size(); i++) {
+            Object pair1=pairs1.get(i);
+            for(int j=0; j<pairs2.size(); j++) {
+                Object pair2=pairs2.get(j);
+                if (pair1.equals(pair2)) {
+                    intersection++;
+                    pairs2.remove(j);
+                    break;
+                }
+            }
+        }
+        return ((2.0*intersection)/union)*100;
     }
 }

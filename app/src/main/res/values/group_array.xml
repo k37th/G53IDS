@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="grouping_array">
+        <item>Bank</item>
+        <item>Convenience Store</item>
         <item>Eatery</item>
-        <item>Public Service</item>
-        <item>Utilities</item>
-        <item>Necessities</item>
+        <item>Petrol Station</item>
+        <item>Police Station</item>
+        <item>Post Office</item>
     </string-array>
     <string-array name="availability_array">
         <item>Any</item>

@@ -16,5 +16,6 @@
     <string name="title_activity_details">Details Of POI</string>
     <string name="title_activity_add">Add New POI</string>
     <string name="title_activity_select">Select coordinates</string>
-
+    <string name="pref_contribute">Be a contributor</string>
+    <string name="pref_contribute_summ">Receive prompts when nearby pending locations to confirm their existence</string>
 </resources>

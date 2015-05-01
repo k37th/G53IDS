@@ -5,6 +5,7 @@ import android.app.SearchManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.location.Location;
 import android.os.AsyncTask;
 import android.provider.MediaStore;
 import android.support.v7.app.ActionBarActivity;
@@ -12,6 +13,7 @@ import android.os.Bundle;
 import android.support.v7.widget.SearchView;
 import android.util.Log;
 import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -23,6 +25,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.graphhopper.util.StopWatch;
 import com.keith.android.g53ids.database.DBHelper;
 
 import org.mapsforge.core.model.LatLong;
@@ -32,6 +35,8 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+
+import static com.keith.android.g53ids.R.drawable.*;
 
 
 public class SearchActivity extends ActionBarActivity implements AdapterView.OnItemSelectedListener{
@@ -45,6 +50,7 @@ public class SearchActivity extends ActionBarActivity implements AdapterView.OnI
     private Calendar calendar;
     private int day;
     private int hour;
+    Location l;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -88,6 +94,10 @@ public class SearchActivity extends ActionBarActivity implements AdapterView.OnI
         calendar = Calendar.getInstance();
         day = calendar.get(Calendar.DAY_OF_WEEK); //Sunday starts with 1
         hour = calendar.get(Calendar.HOUR_OF_DAY); //10pm is 22
+        l = new Location("Origin");
+        LatLong loc = UserLocation.getInstance().getLocation();
+        l.setLatitude(loc.latitude);
+        l.setLongitude(loc.longitude);
     }
 
 
@@ -102,20 +112,23 @@ public class SearchActivity extends ActionBarActivity implements AdapterView.OnI
         return true;
     }
 
-//    @Override
-//    public boolean onOptionsItemSelected(MenuItem item) {
-//        // Handle action bar item clicks here. The action bar will
-//        // automatically handle clicks on the Home/Up button, so long
-//        // as you specify a parent activity in AndroidManifest.xml.
-//        int id = item.getItemId();
-//
-//        //noinspection SimplifiableIfStatement
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle action bar item clicks here. The action bar will
+        // automatically handle clicks on the Home/Up button, so long
+        // as you specify a parent activity in AndroidManifest.xml.
+        int id = item.getItemId();
+
+        //noinspection SimplifiableIfStatement
 //        if (id == R.id.action_settings) {
 //            return true;
 //        }
-//
-//        return super.onOptionsItemSelected(item);
-//    }
+        if(id == android.R.id.home){
+            finish();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
 
     @Override
     protected void onNewIntent(Intent intent){
@@ -141,13 +154,25 @@ public class SearchActivity extends ActionBarActivity implements AdapterView.OnI
             TextView nameTextView = (TextView)convertView.findViewById(R.id.poi_name);
             nameTextView.setText(p.getName());
             TextView typeTextView = (TextView)convertView.findViewById(R.id.poi_type);
+            View shopStatus = (View)convertView.findViewById(R.id.poi_status);
 //            if(!p.getId().equals("0")){
                 typeTextView.setText(p.getType());
+
+            LatLong destLoc = p.getCoordinates();
+            Location d = new Location("Destination");
+            d.setLatitude(destLoc.latitude);
+            d.setLongitude(destLoc.longitude);
+            double distance = Math.round(l.distanceTo(d)/1000.0 * 100.0) / 100.0;
+            TextView distanceTextView = (TextView)convertView.findViewById(R.id.poi_distance);
+            distanceTextView.setText(Double.toString(distance) + "km");
+
                 if(shopOpenDay(p) && shopOpenHours(p)) {
-                    convertView.setBackgroundColor(Color.GREEN);
+//                    convertView.setBackgroundColor(Color.GREEN);
+                    shopStatus.setBackgroundDrawable(getResources().getDrawable(R.drawable.green_circle));
                 }
                 else {
-                    convertView.setBackgroundColor(Color.RED);
+//                    convertView.setBackgroundColor(Color.RED);
+                    shopStatus.setBackgroundDrawable(getResources().getDrawable(R.drawable.red_circle));
                 }
 
 //            }
@@ -204,14 +229,23 @@ public class SearchActivity extends ActionBarActivity implements AdapterView.OnI
             ArrayList<POI>poiList;
             boolean availableNow = availabilitySpinner.getSelectedItem().toString().equals("Open Now");
             if(optionSearch.getCheckedRadioButtonId() == nameSearch.getId()){
+                float time;
+                StopWatch sw = new StopWatch().start();
                 Log.d(TAG, "Checked button is name ");
                 poiList = DBHelper.getInstance(SearchActivity.this).getPois(availableNow, query[0]);
+                time = sw.stop().getSeconds();
+                Log.d(TAG, "Time take for search: "+time);
                 return poiList;
             }
             else{
+                float time;
+                StopWatch sw = new StopWatch().start();
                 Log.d(TAG, "Checked button is tag");
                 poiList = DBHelper.getInstance(SearchActivity.this).getTagRelatedPois(availableNow, query[0]);
+                time = sw.stop().getSeconds();
+                Log.d(TAG, "Time take for search: "+time);
             }
+
 //            ArrayList<POI>poiList = DBHelper.getInstance(SearchActivity.this).getPois(query[0]);
             return poiList;
         }

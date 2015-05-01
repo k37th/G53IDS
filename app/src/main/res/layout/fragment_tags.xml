@@ -71,8 +71,9 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_above="@id/tag_input"
-        android:verticalSpacing="10dp"
-        android:horizontalSpacing="10dp"
+        android:background="#e5e5e5"
+        android:verticalSpacing="2dp"
+        android:horizontalSpacing="2dp"
         android:numColumns="auto_fit"
         android:gravity="center"/>
 

@@ -88,7 +88,11 @@ public class SelectActivity extends ActionBarActivity{
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
         //noinspection SimplifiableIfStatement
-        if (id == R.id.action_done) {
+        if(id == android.R.id.home){
+            finish();
+            return true;
+        }
+        else if (id == R.id.action_done) {
             if(mapView.getLayerManager().getLayers().size()>1) {
                 Intent intent = new Intent();
                 LatLong coordinates = mapView.getLayerManager().getLayers().get(1).getPosition();

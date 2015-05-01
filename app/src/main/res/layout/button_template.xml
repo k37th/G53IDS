@@ -9,6 +9,10 @@
     android:id="@+id/tag_button"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
+    android:background="#fff"
     android:text="Button"
+    android:gravity="center"
+    android:drawableRight="@drawable/ic_action_cancel"
+    android:drawablePadding="10dp"
     style="?android:attr/buttonBarButtonStyle" />
 <!--</LinearLayout>-->

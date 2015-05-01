@@ -10,15 +10,18 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.graphics.Path;
 import android.graphics.PointF;
 import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.os.AsyncTask;
 import android.os.Environment;
+import android.preference.PreferenceManager;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -61,6 +64,7 @@ import org.mapsforge.core.model.LatLong;
 import org.mapsforge.core.model.Point;
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.android.graphics.AndroidResourceBitmap;
+import org.mapsforge.map.android.rendertheme.AssetsRenderTheme;
 import org.mapsforge.map.android.util.AndroidUtil;
 import org.mapsforge.map.android.view.MapView;
 import org.mapsforge.map.layer.Layer;
@@ -72,13 +76,19 @@ import org.mapsforge.map.layer.overlay.Marker;
 import org.mapsforge.map.layer.overlay.Polyline;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.rendertheme.InternalRenderTheme;
+import org.mapsforge.map.rendertheme.XmlRenderTheme;
+import org.mapsforge.map.rendertheme.XmlRenderThemeMenuCallback;
+import org.mapsforge.map.rendertheme.XmlRenderThemeStyleLayer;
+import org.mapsforge.map.rendertheme.XmlRenderThemeStyleMenu;
 import org.w3c.dom.Text;
 
 import java.io.File;
+import java.io.IOException;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 
 public class MainActivity extends ActionBarActivity implements AdapterView.OnItemSelectedListener{
@@ -97,7 +107,7 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
     private BroadcastReceiver broadcastReceiver = new LocationReceiver();
 //    private GPSTracker gps;
     private FallBackLocationTracker tracker;
-    private boolean isAvailable = false; // Remember to this on again for location prompt!!!!
+    private boolean isAvailable = true; // Remember to this on again for location prompt!!!!
     private BroadcastReceiver listenerReceiver;
     private AlarmManager am;
     private PendingIntent pi;
@@ -146,6 +156,16 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
     }
 
     @Override
+    public void onBackPressed(){
+        if(getLayerSize() != 2){
+            removeAdditionalLayers();
+        }
+        else{
+            super.onBackPressed();
+        }
+    }
+
+    @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
@@ -160,10 +180,12 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
         int id = item.getItemId();
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
-            Toast.makeText(this, DBHelper.getInstance(this).getLastSyncDate(),Toast.LENGTH_LONG).show();
+            Intent intent = new Intent(this,SettingsActivity.class);
+            startActivity(intent);
             return true;
         }
         else if(id == R.id.action_sync){
+            Toast.makeText(this, DBHelper.getInstance(this).getLastSyncDate(),Toast.LENGTH_LONG).show();
             syncRemoteDatabase();
             return true;
         }
@@ -297,12 +319,12 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
             {
                 if (!resp.hasErrors())
                 {
-//                    log("from:" + fromLat + "," + fromLon + " to:" + toLat + ","
-//                            + toLon + " found path with distance:" + resp.getDistance()
-//                            / 1000f + ", nodes:" + resp.getPoints().getSize() + ", time:"
-//                            + time + " " + resp.getDebugInfo());
-//                    logUser("the route is " + (int) (resp.getDistance() / 100) / 10f
-//                            + "km long, time:" + resp.getMillis() / 60000f + "min, debug:" + time);
+                    Log.d(TAG,"from:" + fromLoc.latitude + "," + fromLoc.longitude + " to:" + toLat + ","
+                            + toLon + " found path with distance:" + resp.getDistance()
+                            / 1000f + ", nodes:" + resp.getPoints().getSize() + ", time:"
+                            + time + " " + resp.getDebugInfo());
+                    Log.d(TAG,"the route is " + (int) (resp.getDistance() / 100) / 10f
+                            + "km long, time:" + resp.getMillis() / 60000f + "min, debug:" + time);
 
                     mapView.getLayerManager().getLayers().add(createPolyline(resp));
                     Log.d(TAG, "Size of layers" + mapView.getLayerManager().getLayers().size());
@@ -343,6 +365,10 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
 
     private void logUser( String str ){
         Toast.makeText(this, str, Toast.LENGTH_SHORT).show();
+    }
+
+    private int getLayerSize(){
+        return mapView.getLayerManager().getLayers().size();
     }
 
     private LatLong getInitialPosition(){
@@ -388,10 +414,22 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
 //        circle.requestRedraw();
 //    }
 
-    public void displayMarker(String id,LatLong coordinates){
+    public void displayMarker(String id, LatLong coordinates){
         PoiMarker marker = createTappableMarker(this,R.drawable.marker_red, coordinates, id);
         mapView.getLayerManager().getLayers().add(marker);
         mapView.getModel().mapViewPosition.animateTo(coordinates);
+    }
+
+    public void displayLabel(String name, LatLong coordinates){
+        TextView bubbleView = new TextView(this);
+        Utils.setBackground(bubbleView,getResources().getDrawable(R.drawable.balloon_overlay_unfocused));
+        bubbleView.setGravity(Gravity.CENTER);
+        bubbleView.setMaxEms(20);
+        bubbleView.setTextSize(15);
+        bubbleView.setTextColor(android.graphics.Color.BLACK);
+        bubbleView.setText(name);
+        Bitmap bubble = Utils.viewToBitmap(this,bubbleView);
+        mapView.getLayerManager().getLayers().add(new Marker(coordinates,bubble, 0, -bubble.getHeight()));
     }
 
     public PoiMarker createTappableMarker(Context c, int resourceIdentifier,
@@ -457,12 +495,18 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
     public class ListenerReceiver extends BroadcastReceiver{
         @Override
         public void onReceive(Context c, Intent i){
-            if(ConnectivityState.getInstance(getApplicationContext()).isInternetAvailable() && isAvailable ){
-                isAvailable = false;
-                Log.d(TAG,"Suggestion will take place");
-                LatLong loc = UserLocation.getInstance().getLocation();
-                Log.d(TAG, "Latitude sent: "+ loc.latitude +"Longitude sent: " + loc.longitude);
-                getPendingPoi(loc.latitude,loc.longitude);
+            if(isContributor()) {
+                Log.d(TAG, "User is contributor");
+                if (ConnectivityState.getInstance(getApplicationContext()).isInternetAvailable() && isAvailable) {
+                    isAvailable = false;
+                    Log.d(TAG, "Suggestion will take place");
+                    LatLong loc = UserLocation.getInstance().getLocation();
+                    Log.d(TAG, "Latitude sent: " + loc.latitude + "Longitude sent: " + loc.longitude);
+                    getPendingPoi(loc.latitude, loc.longitude);
+                }
+            }
+            else{
+                Log.d(TAG, "User is not contributor");
             }
         }
     }
@@ -500,14 +544,18 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
                 String id = data.getStringExtra("poiID");
 //                Toast.makeText(this,id,Toast.LENGTH_SHORT).show();
                 POI p = DBHelper.getInstance(this).getPoi(id);
-                displayMarker(p.getId(),p.getCoordinates());
+                displayMarker(p.getId(), p.getCoordinates());
+                displayLabel(p.getName(), p.getCoordinates());
             }
         }
         else if(requestCode == ROUTE_REQUEST){
             if(resultCode == RESULT_OK){
                 String id = data.getStringExtra("poiID");
                 Toast.makeText(this,id,Toast.LENGTH_SHORT).show();
-                calcPath(getCurrentPosition(),2.945219,101.874778);
+                Double lat = data.getDoubleExtra("poiLat",0);
+                Double lon = data.getDoubleExtra("poiLon",0);
+//                calcPath(getCurrentPosition(),2.945219,101.874778);
+                calcPath(getCurrentPosition(), lat, lon);
             }
         }
     }
@@ -541,11 +589,14 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
         }
         params.put("date",date);
         progressDialog.show();
+        float time;
+        StopWatch sw = new StopWatch().start();
         client.post("http://g53ids-env.elasticbeanstalk.com/syncDatabase.php", params, new AsyncHttpResponseHandler(){
             @Override
             public void onSuccess(int statusCode, Header[] headers, byte[] responseBody){
-//                Log.d(TAG,new String(responseBody));
+                Log.d(TAG,new String(responseBody));
                 saveNewData(new String(responseBody));
+//                new storePoiData().execute(new String(responseBody));
                 getSyncDatetime();
                 syncTagTable(params);
 //                progressDialog.dismiss();
@@ -558,6 +609,22 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
                 Log.d(TAG, "Failure in getting data");
             }
         });
+        time = sw.stop().getSeconds();
+        Log.d(TAG, "Time take for sync: "+time);
+    }
+
+    private class storePoiData extends AsyncTask<String, Void, Boolean>{
+        protected Boolean doInBackground(String... query){
+            Log.d(TAG, "Poi database starting");
+            saveNewData(query[0]);
+            return true;
+        }
+
+        protected void onPostExecute(Boolean done){
+//            syncTagTable(params);
+            progressDialog.dismiss();
+            Log.d(TAG, "Poi database synced");
+        }
     }
 
     public void saveNewData(String responseBody){
@@ -572,7 +639,8 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
                     }
 
                 }
-                Toast.makeText(this,"Poi table updated", Toast.LENGTH_LONG).show();
+//                Toast.makeText(this,"Poi table updated", Toast.LENGTH_LONG).show();
+                Log.d(TAG, "Poi table updated");
             }
 
         }catch(JSONException e){
@@ -887,7 +955,8 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
         PointF p2 = calculateDerivedPosition(center, mult * radius, 90);
         PointF p3 = calculateDerivedPosition(center, mult * radius, 180);
         PointF p4 = calculateDerivedPosition(center, mult * radius, 270);
-
+        float time;
+        StopWatch sw = new StopWatch().start();
         ArrayList<POI> results = DBHelper.getInstance(MainActivity.this).retrieveNearPoi(type,p1,p2,p3,p4);
         if(results.size()!=0) {
             removeAdditionalLayers();
@@ -897,8 +966,11 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
             }
         }
         else{
+            Toast.makeText(getApplicationContext(), "No locations found", Toast.LENGTH_SHORT).show();
             Log.d(TAG, "No results");
         }
+        time = sw.stop().getSeconds();
+        Log.d(TAG, "Time take for locate: "+time);
     }
 
     public PointF calculateDerivedPosition(PointF point,
@@ -930,5 +1002,10 @@ public class MainActivity extends ActionBarActivity implements AdapterView.OnIte
 
         return newPoint;
 
+    }
+
+    public boolean isContributor(){
+        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
+        return sharedPref.getBoolean("pref_contribute",false);
     }
 }
